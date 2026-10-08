@@ -203,7 +203,7 @@ def run_evaluation(
                 title=doc["title"],
             )
             status_icon = "+" if result.is_new else "~"
-            print(f"  [{status_icon}] {doc['source_path']} → {result.chunks_created} chunks")
+            print(f"  [{status_icon}] {doc['source_path']} -> {result.chunks_created} chunks")
 
         print(f"\nTotal documents: {len(documents)}")
         total_chunks = sum(
@@ -296,16 +296,16 @@ def run_evaluation(
         print(f"Documents       : {len(documents)}")
         print(f"Chunks indexed  : {total_chunks}")
         print(f"Queries run     : {len(queries)}")
-        print(f"Scoring formula : 0.7 × cosine + 0.3 × keyword_overlap")
+        print(f"Scoring formula : 0.7 * cosine + 0.3 * keyword_overlap")
         print(f"Min score       : {min_score}")
         print(f"Top-K evaluated : {top_k}")
 
-        print(f"\n{'─' * 40}")
+        print(f"\n{'-' * 40}")
         print(f"{'METRIC':<20} {'K=1':>8} {'K=3':>8} {'K=5':>8}")
-        print(f"{'─' * 40}")
+        print(f"{'-' * 40}")
         print(f"{'Recall@K':<20} {metrics['recall_1']:>7.1%} {metrics['recall_3']:>7.1%} {metrics['recall_5']:>7.1%}")
         print(f"{'Precision@K':<20} {metrics['precision_1']:>7.1%} {metrics['precision_3']:>7.1%} {metrics['precision_5']:>7.1%}")
-        print(f"{'─' * 40}")
+        print(f"{'-' * 40}")
         print(f"\nMRR (Mean Reciprocal Rank): {metrics['mrr']:.3f}")
         print(f"Queries succeeded (@5)    : {metrics['success_count']}/{len(queries)}")
         print(f"Queries failed    (@5)    : {metrics['failure_count']}/{len(queries)}")
@@ -326,7 +326,7 @@ def run_evaluation(
                 results_f = fi["results"]
                 cat = fi["category"]
 
-                print(f"\n{'─' * 50}")
+                print(f"\n{'-' * 50}")
                 print(f"QUERY   : [{q['id']}] {q['query']}")
                 print(f"CATEGORY: {q['category']}")
                 print(f"PARAPHRASE: {'YES (lex_overlap=' + q.get('lexical_overlap','?') + ')' if q.get('is_paraphrase') else 'NO'}")
@@ -335,14 +335,14 @@ def run_evaluation(
                 if results_f:
                     print(f"TOP RESULTS:")
                     for i, r in enumerate(results_f[:3], 1):
-                        marker = "✓" if r.source_path in q["expected_sources"] else "✗"
-                        print(f"  {i}. [{marker}] {r.source_path}  score={r.score:.4f}")
+                        marker = "[+]" if r.source_path in q["expected_sources"] else "[-]"
+                        print(f"  {i}. {marker} {r.source_path}  score={r.score:.4f}")
                 else:
-                    print("TOP RESULTS: (none — all below min_score threshold)")
+                    print("TOP RESULTS: (none - all below min_score threshold)")
 
                 print(f"FAILURE CATEGORY: {cat}")
 
-            print(f"\n{'─' * 50}")
+            print(f"\n{'-' * 50}")
             print("FAILURE CATEGORY SUMMARY:")
             for cat, count in sorted(failure_category_counts.items(), key=lambda x: -x[1]):
                 print(f"  {cat:<40} {count:>3} queries")
@@ -375,8 +375,8 @@ def run_evaluation(
         print(f"\nWeaknesses of local baseline:")
         print(f"  - No semantic understanding of synonym relationships")
         print(f"  - Paraphrases using different vocabulary score poorly")
-        print(f"  - 'persistence technology' ≠ 'database' in embedding space")
-        print(f"  - 'HTTP endpoints' ≠ 'REST endpoints' without shared tokens")
+        print(f"  - 'persistence technology' != 'database' in embedding space")
+        print(f"  - 'HTTP endpoints' != 'REST endpoints' without shared tokens")
         print(f"\nRECOMMENDATION: For production, swap in a neural provider")
         print(f"  (Ollama/SentenceTransformers) via the EmbeddingProvider interface.")
         print(f"  The hybrid 0.3 keyword weight partially compensates, but cannot")

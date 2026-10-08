@@ -7,9 +7,14 @@ runtime rules in .envcore/rules/global/.
 """
 
 import os
+import json
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
-import yaml
+
+try:
+    import yaml
+except ImportError:
+    yaml = None
 
 from .models import Rule, RuleScope, current_iso_timestamp
 from .parser import RuleParser
@@ -185,9 +190,11 @@ class RuleStore:
 
     @staticmethod
     def _write_rule_file(rule: Rule, path: Path) -> None:
-        """Serializes rule to clean YAML format."""
+        """Serializes rule to clean YAML or JSON format."""
         path.parent.mkdir(parents=True, exist_ok=True)
         raw_dict = rule.model_dump(mode="json")
-        # Write clean yaml
         with open(path, "w", encoding="utf-8") as f:
-            yaml.safe_dump(raw_dict, f, sort_keys=False, default_flow_style=False)
+            if yaml is not None:
+                yaml.safe_dump(raw_dict, f, sort_keys=False, default_flow_style=False)
+            else:
+                json.dump(raw_dict, f, indent=2)
