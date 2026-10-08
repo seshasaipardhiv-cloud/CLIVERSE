@@ -72,6 +72,18 @@ class SessionStoreTests(unittest.TestCase):
         with self.assertRaises(SessionNotFound):
             self.store.add_event("missing", "CLI", "STARTED", "start")
 
+    def test_database_symlink_is_rejected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            parent = Path(directory)
+            metadata = parent / ".envcore"
+            metadata.mkdir(mode=0o700)
+            external_database = parent / "external.sqlite3"
+            external_database.write_text("not a database", encoding="utf-8")
+            (metadata / "cliverse.sqlite3").symlink_to(external_database)
+
+            with self.assertRaises(InvalidSession):
+                SessionStore(metadata / "cliverse.sqlite3")
+
     def test_cli_session_lifecycle(self):
         repository = Path(__file__).resolve().parents[1]
 

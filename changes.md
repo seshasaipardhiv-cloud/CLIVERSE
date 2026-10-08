@@ -105,3 +105,18 @@
   only until Member 4 confirms a safe integration.
 - Verified: 9 Git inspection/commit tests and 5 recovery tests passed in
   disposable repositories, including preservation of unrelated changes.
+
+## 2026-10-08 — M1-09: verify Member 1 vertical path
+
+- Added a deterministic end-to-end test covering init → structured plan →
+  guarded local process → session/events → session-linked Git commit →
+  confirmed undo.
+- The test uses a temporary Git project, local Python process and injected
+  allow-only test authorizers. It uses no hosted service or model weights.
+- Hardened `.envcore` permissions and rejected symlinked session databases;
+  isolated Git inspection from system/global configuration and rechecked the
+  reviewed worktree before staging.
+- Verified: all 48 Member 1 core tests and all 6 existing Member 4 baseline
+  tests passed; `git diff --check` passed.
+- Actual Laya model inference, Member 2 retrieval and Member 4 authorization
+  remain unverified integration gates.

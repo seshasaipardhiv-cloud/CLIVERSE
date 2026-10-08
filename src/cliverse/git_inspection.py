@@ -83,7 +83,15 @@ class GitInspector:
     def _run_result(self, arguments: list[str]) -> subprocess.CompletedProcess[str]:
         try:
             completed = subprocess.run(
-                [self._git, "--no-pager", "-C", str(self.project_root), *arguments],
+                [
+                    self._git,
+                    "--no-pager",
+                    "-C",
+                    str(self.project_root),
+                    "-c",
+                    "core.fsmonitor=false",
+                    *arguments,
+                ],
                 shell=False,
                 cwd=self.project_root,
                 env={
@@ -91,6 +99,8 @@ class GitInspector:
                     "LC_ALL": "C",
                     "GIT_OPTIONAL_LOCKS": "0",
                     "GIT_PAGER": "cat",
+                    "GIT_CONFIG_NOSYSTEM": "1",
+                    "GIT_CONFIG_GLOBAL": os.devnull,
                 },
                 stdin=subprocess.DEVNULL,
                 capture_output=True,
@@ -172,6 +182,8 @@ class GitInspector:
                     [
                         self._git,
                         "--no-pager",
+                        "-c",
+                        "core.fsmonitor=false",
                         "diff",
                         "--no-index",
                         "--no-ext-diff",
@@ -185,6 +197,8 @@ class GitInspector:
                         "PATH": os.defpath,
                         "LC_ALL": "C",
                         "GIT_PAGER": "cat",
+                        "GIT_CONFIG_NOSYSTEM": "1",
+                        "GIT_CONFIG_GLOBAL": os.devnull,
                     },
                     stdin=subprocess.DEVNULL,
                     capture_output=True,
@@ -214,6 +228,14 @@ class GitInspector:
         if result.returncode == 1:
             return True
         raise GitCommandFailed(result.stderr.strip() or "Could not inspect the Git index.")
+
+    def has_unstaged_changes(self) -> bool:
+        result = self._run_result(["diff", "--quiet"])
+        if result.returncode == 0:
+            return False
+        if result.returncode == 1:
+            return True
+        raise GitCommandFailed(result.stderr.strip() or "Could not inspect the work tree.")
 
     def history(self, limit: int = 20) -> tuple[GitCommit, ...]:
         if not isinstance(limit, int) or isinstance(limit, bool) or not 1 <= limit <= self.MAX_HISTORY_LIMIT:

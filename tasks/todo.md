@@ -81,12 +81,15 @@ their internals.
     explicit confirmation. CLI exposes read-only undo preview only; actual
     mutation remains unavailable until Member 4 confirms the integration.
 
-- [ ] **M1-09 — Verify the Member 1 end-to-end path**
+- [x] **M1-09 — Verify the Member 1 end-to-end path**
   - Acceptance: init → plan/clarify → guarded fake CLI → session/events → Git
     evidence works without network or model weights.
   - Verify: one deterministic end-to-end test and documented demo commands.
-  - Files: integration tests and README.
+  - Files: `tests/test_core_end_to_end.py`, `docs/member1-usage.md`.
   - Dependencies: M1-01 through M1-08.
+  - Status: verified with a local Python fake process and injected fake
+    authorizers; all 48 core tests passed. No actual AI CLI or local model was
+    invoked.
 
 ## Member 2 — RAG + Rules (teammate-owned)
 

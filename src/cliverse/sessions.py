@@ -1,6 +1,7 @@
 """SQLite persistence for CLIVERSE sessions and append-only core events."""
 
 import json
+import os
 import sqlite3
 import uuid
 from contextlib import contextmanager
@@ -51,7 +52,13 @@ class SessionStore:
     MAX_LIST_LIMIT = 1000
 
     def __init__(self, database_path: str | Path) -> None:
-        self.database_path = Path(database_path).expanduser().resolve()
+        expanded = Path(database_path).expanduser()
+        self.database_path = Path(os.path.abspath(expanded))
+        parents = (self.database_path.parent, *self.database_path.parent.parents)
+        if self.database_path.is_symlink() or any(
+            parent.exists() and parent.is_symlink() for parent in parents
+        ):
+            raise InvalidSession("Session database and parent directories must not use symlinks.")
         self.database_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         self._initialize_schema()
 
@@ -275,7 +282,11 @@ class SessionStore:
 
     @classmethod
     def _validate_limit(cls, limit: int) -> None:
-        if not isinstance(limit, int) or not 1 <= limit <= cls.MAX_LIST_LIMIT:
+        if (
+            not isinstance(limit, int)
+            or isinstance(limit, bool)
+            or not 1 <= limit <= cls.MAX_LIST_LIMIT
+        ):
             raise InvalidSession(f"Limit must be between 1 and {cls.MAX_LIST_LIMIT}.")
 
     @staticmethod

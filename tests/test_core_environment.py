@@ -1,4 +1,5 @@
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -32,6 +33,7 @@ class ProjectEnvironmentTests(unittest.TestCase):
             root = Path(directory)
             config = root / ".envcore" / "config.json"
             config.parent.mkdir()
+            config.parent.chmod(0o700)
             config.write_text('{"owner":"existing"}', encoding="utf-8")
 
             with self.assertRaises(EnvironmentAlreadyInitialized):
@@ -53,6 +55,16 @@ class ProjectEnvironmentTests(unittest.TestCase):
 
             with self.assertRaises(InvalidEnvironment):
                 ProjectEnvironment.load(directory)
+
+    @unittest.skipUnless(os.name == "posix", "POSIX permissions required")
+    def test_initialize_rejects_public_metadata_directory(self):
+        with tempfile.TemporaryDirectory() as directory:
+            metadata_dir = Path(directory) / ".envcore"
+            metadata_dir.mkdir(mode=0o755)
+            metadata_dir.chmod(0o755)
+
+            with self.assertRaises(InvalidEnvironment):
+                ProjectEnvironment.initialize(directory)
 
     def test_cli_init_and_status_emit_json(self):
         repository = Path(__file__).resolve().parents[1]

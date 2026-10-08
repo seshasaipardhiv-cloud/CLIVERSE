@@ -2,6 +2,7 @@
 
 import json
 import os
+import stat
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -36,8 +37,11 @@ class ProjectEnvironment:
         if metadata_dir.is_symlink():
             raise InvalidEnvironment(f"Refusing symlinked environment directory: {metadata_dir}")
         metadata_dir.mkdir(mode=0o700, exist_ok=True)
+        cls._require_private(metadata_dir)
 
         config_path = metadata_dir / CONFIG_NAME
+        if config_path.is_symlink():
+            raise InvalidEnvironment(f"Refusing symlinked environment configuration: {config_path}")
         config = {
             "schema_version": SCHEMA_VERSION,
             "environment_id": str(uuid.uuid4()),
@@ -62,6 +66,7 @@ class ProjectEnvironment:
             stream.flush()
             os.fsync(stream.fileno())
 
+        cls._require_private(config_path)
         return cls(
             root=project_root,
             metadata_dir=metadata_dir,
@@ -81,6 +86,8 @@ class ProjectEnvironment:
             raise InvalidEnvironment("Environment configuration must not use symlinks.")
         if not metadata_dir.is_dir() or not config_path.is_file():
             raise InvalidEnvironment(f"No initialized environment found under {project_root}")
+        cls._require_private(metadata_dir)
+        cls._require_private(config_path)
 
         try:
             config = json.loads(config_path.read_text(encoding="utf-8"))
@@ -101,3 +108,10 @@ class ProjectEnvironment:
             config_path=config_path,
             config=config,
         )
+
+    @staticmethod
+    def _require_private(path: Path) -> None:
+        if os.name == "posix" and stat.S_IMODE(path.stat().st_mode) & 0o077:
+            raise InvalidEnvironment(
+                f"Environment path must be accessible only by its owner: {path}"
+            )

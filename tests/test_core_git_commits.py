@@ -26,6 +26,17 @@ class FakeAuthorizer:
         return self.decision
 
 
+class MutatingAuthorizer(FakeAuthorizer):
+    def __init__(self, path):
+        super().__init__(AuthorizationDecision(Decision.ALLOW, "Allowed"))
+        self.path = path
+
+    def authorize(self, request):
+        self.requests.append(request)
+        self.path.write_text("changed after review\n", encoding="utf-8")
+        return self.decision
+
+
 class GitCommitterTests(unittest.TestCase):
     def setUp(self):
         self.temporary_directory = tempfile.TemporaryDirectory()
@@ -136,6 +147,21 @@ class GitCommitterTests(unittest.TestCase):
                 authorizer,
                 confirmed=True,
             )
+        self.assertEqual(GitInspector(self.root).history(1)[0].subject, "Baseline")
+
+    def test_changed_content_after_authorization_is_refused(self):
+        target = self.root / "tracked.txt"
+        target.write_text("reviewed content\n", encoding="utf-8")
+        with self.assertRaises(GitCommitNotSafe):
+            GitCommitter(self.root).commit_changes(
+                "session-1",
+                "agent",
+                "Commit",
+                ["tracked.txt"],
+                MutatingAuthorizer(target),
+                confirmed=True,
+            )
+        self.assertEqual(target.read_text(encoding="utf-8"), "changed after review\n")
         self.assertEqual(GitInspector(self.root).history(1)[0].subject, "Baseline")
 
 

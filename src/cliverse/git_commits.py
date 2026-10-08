@@ -112,7 +112,10 @@ class GitCommitter:
             ["add", "--", *(f":(literal){path}" for path in normalized_paths)]
         )
         staged_status = self._inspector.status()
-        if set(staged_status.changed_paths) != set(normalized_paths):
+        if (
+            set(staged_status.changed_paths) != set(normalized_paths)
+            or self._inspector.has_unstaged_changes()
+        ):
             raise GitCommitNotSafe("Staged paths differ from the authorized path set.")
         self._run_git(
             [

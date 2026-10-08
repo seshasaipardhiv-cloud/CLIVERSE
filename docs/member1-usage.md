@@ -14,8 +14,9 @@ python3.11 env.py init --root /path/to/project
 python3.11 env.py status --root /path/to/project
 ```
 
-Initialization creates `.envcore/config.json` and refuses to overwrite an
-existing configuration.
+Initialization creates `.envcore/config.json` with owner-only access on POSIX
+systems and refuses to overwrite an existing configuration or use symlinked
+environment paths.
 
 ## Plan a task
 
@@ -73,3 +74,5 @@ session trailer.
 - Session requests and events are stored locally in
   `.envcore/cliverse.sqlite3`. The data is not encrypted at rest.
 - No RAG provider, model weights, hosted API or AI CLI is bundled or started.
+- The deterministic vertical-path test can be run with
+  `python3.11 -m unittest discover -s tests -p 'test_core_end_to_end.py' -v`.
