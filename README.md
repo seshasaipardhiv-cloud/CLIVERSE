@@ -7,12 +7,12 @@
 **Team Name:** CLIVERSE Team
 
 
-| Member | Role & Contribution |
-| ------ | ------------------- |
-| **TVSS Phanindra Guptha** (`@siva169`) | **Member 1**: Core Environment, CLI Execution Pipeline, CLI Adapters, Laya Planning Layer, Filesystem Monitoring & Git Recovery |
-| **Seshasai Pardhiv** (`@seshasaipardhiv-cloud`) | **Member 2**: Persistent RAG & Memory, Vector Storage/Search, Conversation Indexing & Custom Rules Engine |
-| **Frontend & UX Team** | **Member 3**: Unified Dashboard Frontend (Next.js/React/Tailwind), Project Management, Live Activity & Session Viewer |
-| **Mudiyam Vittal** (`@madhu2003-cloud`) | **Member 4**: Trust & Security Layer, Permissions & Sandboxing, Secrets Protection, Regulatory Governance & Tamper-Evident Audit Logging |
+| Member | Contribution |
+| ------ | ------------ |
+| **Member 1** | Core Environment, CLI Execution Pipeline, CLI Adapters, Laya Planning Layer, Filesystem Monitoring & Git Recovery |
+| **Member 2** | Persistent RAG & Memory, Vector Storage/Search, Conversation Indexing & Custom Rules Engine |
+| **Member 3** | Unified Dashboard Frontend (Next.js/React/Tailwind), Project Management, Live Activity & Session Viewer |
+| **Member 4** | Trust & Security Layer, Permissions & Sandboxing, Secrets Protection, Regulatory Governance & Tamper-Evident Audit Logging |
 
 
 ## Problem Statement
@@ -132,10 +132,10 @@ During the Hack Day, we built and delivered the complete foundational **Security
 
 ### Team Contributions
 
-- **TVSS Phanindra Guptha (@siva169) — Member 1:** CLI execution pipeline, adapter abstraction, prompt structuring, and Git recovery engine.
-- **Seshasai Pardhiv (@seshasaipardhiv-cloud) — Member 2:** Persistent memory index, vector embeddings, rule hierarchy (Global -> Project -> CLI -> Task).
-- **Frontend & UX Team — Member 3:** Central control UI, session manager, policy editor, and live event monitoring.
-- **Mudiyam Vittal (@madhu2003-cloud) — Member 4:** Trust Gate pipeline, identity tokens, permissions, strict sandboxing, regulatory compliance engine, and tamper-evident audit logging.
+- **Member 1 (Core + Laya):** CLI execution pipeline, adapter abstraction, prompt structuring, and Git recovery engine.
+- **Member 2 (RAG + Rules):** Persistent memory index, vector embeddings, rule hierarchy (Global -> Project -> CLI -> Task).
+- **Member 3 (Dashboard + UX):** Central control UI, session manager, policy editor, and live event monitoring.
+- **Member 4 (Security + Governance + Audit):** Trust Gate pipeline, identity tokens, permissions, strict sandboxing, regulatory compliance engine, and tamper-evident audit logging.
 
 ## Working Application
 
