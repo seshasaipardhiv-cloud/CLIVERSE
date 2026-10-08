@@ -83,6 +83,13 @@ class CliverseMemoryProviderAdapter:
     """
     Adapter implementing Member 1's MemoryProvider protocol.
     Delegates retrieval and rule resolution to LayaIntelligenceService.
+
+    Performance note:
+        Member 1's RequestPlanner calls retrieve_context() and get_applicable_rules()
+        in sequence for the same task. To prevent two full build_intelligence_context()
+        evaluations (double SQLite read + double rule resolution), the adapter maintains a
+        one-slot cache keyed on (task_str, project_id, cli_name). Consecutive calls with
+        identical arguments share one evaluation result.
     """
 
     def __init__(
@@ -96,13 +103,52 @@ class CliverseMemoryProviderAdapter:
         self.cli_name = cli_name
         self.last_intelligence_context: Optional[LayaIntelligenceContext] = None
         self.last_member2_rules: Dict[str, Any] = {}
+        # Single-slot cache: (task_str, project_id, cli_name) → LayaIntelligenceContext
+        self._cache_key: Optional[tuple] = None
+        self._cached_context: Optional[LayaIntelligenceContext] = None
+
+    def _get_or_build_context(self, task: Any) -> LayaIntelligenceContext:
+        """Returns cached context if task/project/cli match last call; builds otherwise.
+
+        This eliminates the double build_intelligence_context() call that occurs when
+        Member 1's RequestPlanner invokes retrieve_context() then get_applicable_rules()
+        for the same task in a single plan() request.
+        """
+        # Normalise task to string for cache key
+        task_str: str
+        if isinstance(task, str):
+            task_str = task.strip()
+        elif hasattr(task, "task"):
+            task_str = str(getattr(task, "task", "")).strip()
+        else:
+            task_str = str(task).strip()
+
+        cache_key = (task_str, self.project_id, self.cli_name)
+        if self._cache_key == cache_key and self._cached_context is not None:
+            return self._cached_context
+
+        intel: LayaIntelligenceContext = self.service.build_intelligence_context(
+            task=task,
+            project_id=self.project_id,
+            cli_name=self.cli_name,
+        )
+        self._cache_key = cache_key
+        self._cached_context = intel
+        self.last_intelligence_context = intel
+        return intel
 
     def get_last_intelligence_context(self) -> Optional[LayaIntelligenceContext]:
         """Returns the full untruncated LayaIntelligenceContext from the latest call."""
         return self.last_intelligence_context
 
     def get_member2_rule(self, rule_id: str) -> Optional[Any]:
-        """Returns the complete Member 2 Rule model for a given rule_id."""
+        """Returns the complete Member 2 Rule model for a given rule_id.
+
+        This is the reliable access path. The _member2_rule attribute attached directly
+        to frozen CliverseRule dataclasses via object.__setattr__ is best-effort and
+        will not survive pickle, deepcopy, or dataclass replace() operations.
+        Use this method for safe downstream access.
+        """
         return self.last_member2_rules.get(rule_id)
 
     def retrieve_context(self, task: Any) -> ContextBundle:
@@ -110,12 +156,7 @@ class CliverseMemoryProviderAdapter:
         Retrieves context items and provenance from Member 2 and packs
         them into Member 1's ContextBundle.
         """
-        intel: LayaIntelligenceContext = self.service.build_intelligence_context(
-            task=task,
-            project_id=self.project_id,
-            cli_name=self.cli_name,
-        )
-        self.last_intelligence_context = intel
+        intel = self._get_or_build_context(task)
         items = tuple(
             ContextItem(
                 item_id=f"mem-{idx}",
@@ -141,13 +182,11 @@ class CliverseMemoryProviderAdapter:
         Retrieves winning rules from Member 2 deterministic resolution and maps
         them into Member 1's Rule dataclass without discarding critical semantics.
         Preserves effect, mandatory state, target domain, and version.
+
+        Uses the single-entry context cache: if retrieve_context() was already called
+        for the same task, this returns from the cached result at zero extra cost.
         """
-        intel: LayaIntelligenceContext = self.service.build_intelligence_context(
-            task=task,
-            project_id=self.project_id,
-            cli_name=self.cli_name,
-        )
-        self.last_intelligence_context = intel
+        intel = self._get_or_build_context(task)
         self.last_member2_rules = {r.rule_id: r for r in intel.rule_resolution.winning_rules}
 
         result_rules: List[CliverseRule] = []
@@ -173,11 +212,20 @@ class CliverseMemoryProviderAdapter:
                 priority=effective_prio,
                 source=source_str,
             )
-            # Attach full untruncated Member 2 Rule instance for rich downstream access
+            # Best-effort: attach full Member 2 Rule to the frozen dataclass for
+            # consumers that inspect _member2_rule directly. WARNING: this attribute
+            # is NOT preserved across pickle, deepcopy, or dataclass.replace().
+            # Use adapter.get_member2_rule(rule_id) for reliable downstream access.
             try:
                 object.__setattr__(cliverse_rule, "_member2_rule", r)
-            except Exception:
-                pass
+            except (TypeError, AttributeError) as e:
+                import warnings
+                warnings.warn(
+                    f"Could not attach _member2_rule to CliverseRule '{r.rule_id}': {e}. "
+                    "Use adapter.get_member2_rule(rule_id) instead.",
+                    RuntimeWarning,
+                    stacklevel=2,
+                )
 
             result_rules.append(cliverse_rule)
 

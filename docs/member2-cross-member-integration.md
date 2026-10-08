@@ -2,7 +2,7 @@
 
 **Subsystem:** CLIVERSE — Member 2 (Memory / RAG & Rules Intelligence)  
 **Target Consumers:** Member 1 (Laya Engine & Core Planning), Member 3 (Dashboard), Member 4 (Security & Trust)  
-**Status:** Frozen & Verified (Milestones: Stage 1 — Foundation, Stage 2 — Ingestion + Embedding Foundation, Stage 3 — Retrieval + Context Assembly, Stage 3.5 — RAG Validation + Hardening, Stage 4 — Rules Intelligence, Stage 5 — Unified Laya Intelligence Contract, Stage 5.1 — Integration Safety Hardening, Stage 6 — Real Cross-Member Integration, Final — Hardening + Handoff — 145 Tests Green)
+**Status:** Frozen & Verified (Milestones: Stage 1 — Foundation, Stage 2 — Ingestion + Embedding Foundation, Stage 3 — Retrieval + Context Assembly, Stage 3.5 — RAG Validation + Hardening, Stage 4 — Rules Intelligence, Stage 5 — Unified Laya Intelligence Contract, Stage 5.1 — Integration Safety Hardening, Stage 6 — Real Cross-Member Integration, Final — Hardening + Handoff — 150 Tests Green)
 
 ---
 

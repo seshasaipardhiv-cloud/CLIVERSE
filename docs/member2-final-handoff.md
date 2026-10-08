@@ -2,7 +2,7 @@
 
 **Subsystem:** CLIVERSE — Member 2 (Memory / RAG + Rules Intelligence)  
 **Status:** COMPLETE & FROZEN (Milestones: Stage 1 — Foundation, Stage 2 — Ingestion + Embedding Foundation, Stage 3 — Retrieval + Context Assembly, Stage 3.5 — RAG Validation + Hardening, Stage 4 — Rules Intelligence, Stage 5 — Unified Laya Intelligence Contract, Stage 5.1 — Integration Safety Hardening, Stage 6 — Real Cross-Member Integration, Final — Hardening + Handoff)  
-**Test Suite:** 145 Tests Passing (Zero Regressions, Authoritative Verified Total)  
+**Test Suite:** 150 Tests Passing (Zero Regressions, Authoritative Verified Total)  
 **Authors:** Member 2 Engineering Lead
 
 ---
@@ -191,8 +191,8 @@ python -m pytest tests/test_memory_storage_models.py \
 | `tests/test_rules_engine.py` | 29 | 0 | 29 | Rule parsing, validation, scopes, resolver, conflict traces |
 | `tests/test_laya_intelligence_integration.py` | 11 | 0 | 11 | LayaIntelligenceService facade and integration |
 | `tests/test_stage51_hardening.py` | 19 | 0 | 19 | Safety hardening, tri-state statuses, error vs empty |
-| `tests/test_final_cross_member_integration.py` | 14 | 0 | 14 | Cross-member adapter, zero-duplicate eval, input validation |
-| **Total Member 2 Suite** | **145** | **0** | **145** | **Authoritative verified count** |
+| `tests/test_final_cross_member_integration.py` | 19 | 0 | 19 | Cross-member adapter, single-entry cache, whitespace stripping, input validation |
+| **Total Member 2 Suite** | **150** | **0** | **150** | **Authoritative verified count** |
 
 ### Running RAG Evaluation:
 ```bash

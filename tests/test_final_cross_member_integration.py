@@ -726,6 +726,120 @@ class TestFinalCrossMemberIntegration(unittest.TestCase):
         with self.assertRaises(TypeError):
             self.service.build_intelligence_context(task=None)
 
+    # ── 15. HARSH TRUTHS RESOLUTION VERIFICATION ─────────────────────────────
+
+    def test_adapter_single_entry_cache_prevents_double_evaluation(self):
+        """Verifies RequestPlanner.plan() triggers build_intelligence_context exactly once."""
+        calls = {"build_intel": 0}
+        orig_build = self.service.build_intelligence_context
+
+        def tracked_build(*args, **kwargs):
+            calls["build_intel"] += 1
+            return orig_build(*args, **kwargs)
+
+        self.service.build_intelligence_context = tracked_build
+
+        planner = RequestPlanner(memory_provider=self.adapter)
+        plan_result = planner.plan(PlanningRequest(
+            task="Add JWT authentication for session verification",
+            role="Backend Engineer",
+        ))
+
+        self.assertIsNotNone(plan_result.task)
+        # Even though RequestPlanner calls retrieve_context() AND get_applicable_rules(),
+        # the adapter's single-entry cache must ensure build_intelligence_context runs only ONCE.
+        self.assertEqual(calls["build_intel"], 1)
+
+    def test_extract_task_text_strips_whitespace(self):
+        """Verifies leading and trailing whitespace is stripped from task input."""
+        context = self.service.build_intelligence_context(
+            task="   Deploy microservice to cluster   \n\t",
+            project_id="proj-cliverse",
+        )
+        self.assertEqual(context.task, "Deploy microservice to cluster")
+
+    def test_public_resolve_rules_accepts_pre_evaluated_rules(self):
+        """Verifies public service.resolve_rules() passes through applicable_rules without re-evaluating."""
+        rule1 = Rule(
+            rule_id="test-pre-1",
+            name="Test Pre 1",
+            scope=RuleScope.PROJECT,
+            target="testing",
+            effect=RuleEffect.REQUIRE,
+            description="Run unit tests",
+        )
+        calls = {"get_applicable": 0}
+        orig_get_applicable = self.service.rules_engine.get_applicable_rules
+
+        def tracked_get_applicable(*args, **kwargs):
+            calls["get_applicable"] += 1
+            return orig_get_applicable(*args, **kwargs)
+
+        self.service.rules_engine.get_applicable_rules = tracked_get_applicable
+
+        res = self.service.resolve_rules(
+            task="Run unit tests",
+            project_id="proj-cliverse",
+            applicable_rules=[rule1],
+        )
+
+        self.assertEqual(len(res.winning_rules), 1)
+        self.assertEqual(res.winning_rules[0].rule_id, "test-pre-1")
+        # get_applicable_rules must NOT be called when applicable_rules is provided
+        self.assertEqual(calls["get_applicable"], 0)
+
+    def test_rank_and_deduplicate_configurable_overlap_threshold(self):
+        """Verifies rank_and_deduplicate_results respects custom overlap_threshold."""
+        from memory.models import MemorySearchResult
+        from memory.retrieval.ranking import rank_and_deduplicate_results
+
+        # Two chunks from same record with 50% line overlap
+        c1 = MemorySearchResult(
+            chunk_id="chunk-1",
+            record_id="rec-1",
+            content="Alpha section line 1 to 10",
+            score=0.9,
+            source_path="file.md",
+            source_type="doc",
+            start_line=1,
+            end_line=10,
+        )
+        c2 = MemorySearchResult(
+            chunk_id="chunk-2",
+            record_id="rec-1",
+            content="Beta section line 6 to 15",
+            score=0.85,
+            source_path="file.md",
+            source_type="doc",
+            start_line=6,
+            end_line=15,  # 5 lines overlap with c1 (lines 6-10), out of 10 lines (50%)
+        )
+
+        # With default overlap_threshold=0.6: 50% <= 60%, so c2 is NOT considered redundant
+        res_default = rank_and_deduplicate_results([c1, c2], min_score=0.1, overlap_threshold=0.6)
+        self.assertEqual(len(res_default), 2)
+
+        # With aggressive overlap_threshold=0.4: 50% > 40%, so c2 is dropped as redundant
+        res_strict = rank_and_deduplicate_results([c1, c2], min_score=0.1, overlap_threshold=0.4)
+        self.assertEqual(len(res_strict), 1)
+        self.assertEqual(res_strict[0].chunk_id, "chunk-1")
+
+    def test_rule_parser_json_without_yaml_dependency(self):
+        """Verifies RuleParser handles JSON string definitions natively."""
+        from rules.parser import RuleParser
+        json_data = json.dumps({
+            "id": "json-rule-1",
+            "name": "JSON Rule",
+            "scope": "PROJECT",
+            "target": "security",
+            "effect": "DENY",
+            "description": "Never hardcode passwords",
+        })
+        rules = RuleParser.parse_string(json_data, source_label="json_test")
+        self.assertEqual(len(rules), 1)
+        self.assertEqual(rules[0].rule_id, "json-rule-1")
+        self.assertEqual(rules[0].effect, RuleEffect.DENY)
+
 
 if __name__ == "__main__":
     unittest.main()

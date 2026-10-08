@@ -501,14 +501,23 @@ class LayaIntelligenceService:
         cli_name: Optional[str] = None,
         task_metadata: Optional[Dict[str, Any]] = None,
         task_rules: Optional[List[Rule]] = None,
+        applicable_rules: Optional[List[Rule]] = None,
     ) -> RuleResolution:
-        """Resolves applicable rules into a deterministic RuleResolution."""
+        """Resolves applicable rules into a deterministic RuleResolution.
+
+        Args:
+            applicable_rules: Pre-evaluated rules from get_applicable_rules(). When supplied,
+                applicability evaluation is skipped — resolves conflicts on the provided list
+                only. This matches the behaviour of build_intelligence_context() and avoids
+                the double-evaluation problem when the caller already has applicable rules.
+        """
         return self.rules_engine.resolve_rules(
             task=task,
             project_id=project_id,
             cli_name=cli_name,
             task_metadata=task_metadata,
             task_rules=task_rules,
+            applicable_rules=applicable_rules,
         )
 
     # ── Helpers ───────────────────────────────────────────────────────────────
@@ -529,7 +538,7 @@ class LayaIntelligenceService:
             clean = task.strip()
             if not clean:
                 raise ValueError("Task text must not be empty or whitespace.")
-            return task
+            return clean  # always return the stripped version; avoids retrieval/dedup inconsistencies
         if hasattr(task, "task"):
             val = getattr(task, "task")
             if isinstance(val, str) and val.strip():

@@ -3,6 +3,12 @@ Rule Parser — Member 2 (RAG + Rules)
 
 Provides safe, deterministic loading and normalization of rule definitions
 from YAML, JSON, strings, dictionaries, and files.
+
+Dependency note:
+    pyyaml (>=6.0) is a required dependency (see requirements.txt).
+    If pyyaml is not installed, rule parsing from YAML files will raise an explicit
+    ImportError with installation instructions rather than silently falling back to
+    a limited hand-rolled parser.
 """
 
 import json
@@ -21,6 +27,16 @@ from .validator import RuleValidator, RuleValidationError
 class RuleParseError(ValueError):
     """Raised when a rule definition cannot be parsed or normalized."""
     pass
+
+
+def _assert_yaml_available(source_label: str = "") -> None:
+    """Raises a clear ImportError if pyyaml is not installed."""
+    if yaml is None:
+        raise ImportError(
+            f"pyyaml is required for YAML rule parsing{f' ({source_label})' if source_label else ''}. "
+            "Install it with: pip install pyyaml>=6.0\n"
+            "Alternatively, use JSON format for rule definitions (no extra dependencies required)."
+        )
 
 
 def _parse_yaml_scalar(val_str: str) -> Any:
@@ -164,15 +180,31 @@ class RuleParser:
     def parse_string(cls, content: str, source_label: str = "<string>") -> List[Rule]:
         """
         Parses YAML or JSON string content into a list of Rule instances.
+
+        JSON content (starts with { or [) is parsed with the standard library json module
+        and requires no external dependencies.
+        YAML content requires pyyaml (>=6.0). A clear ImportError is raised if it is
+        not installed, with installation instructions.
         """
         if not content or not content.strip():
             return []
 
+        stripped = content.strip()
         try:
-            if yaml is not None:
-                data = yaml.safe_load(content)
+            # Attempt JSON-first path (stdlib, no dependency)
+            if stripped.startswith("{") or stripped.startswith("["):
+                try:
+                    data = json.loads(stripped)
+                except json.JSONDecodeError:
+                    # Ambiguous — may be YAML block-style; require pyyaml
+                    _assert_yaml_available(source_label)
+                    data = yaml.safe_load(content)
             else:
-                data = _fallback_yaml_parse(content)
+                # YAML path — pyyaml is required
+                _assert_yaml_available(source_label)
+                data = yaml.safe_load(content)
+        except ImportError:
+            raise
         except Exception as e:
             raise RuleParseError(f"Malformed YAML/JSON syntax in {source_label}: {e}") from e
 

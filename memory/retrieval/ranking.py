@@ -13,15 +13,26 @@ def rank_and_deduplicate_results(
     candidates: List[MemorySearchResult],
     min_score: float = 0.35,
     top_k: int = 5,
+    overlap_threshold: float = 0.6,
 ) -> List[MemorySearchResult]:
     """
     Ranks and deduplicates candidate retrieval results:
     1. Filters out candidates below `min_score`.
     2. Sorts candidates descending by relevance `score`.
     3. Deduplicates identical content hashes or identical text bodies (keeps highest-scored).
-    4. Detects significant line overlap (>60%) between chunks from the same record
-       and keeps the higher-scored representative while preserving genuinely distinct sections.
+    4. Detects significant line overlap (> overlap_threshold) between chunks from the same
+       record and keeps the higher-scored representative while preserving genuinely distinct
+       sections.
     5. Returns up to `top_k` distinct, highest-ranked results.
+
+    Args:
+        candidates: Raw retrieval hits from storage.
+        min_score: Minimum relevance score to include a result (0.0 – 1.0).
+        top_k: Maximum number of results to return.
+        overlap_threshold: Fraction of a chunk's lines that must overlap with an already-
+            accepted chunk (from the same record) before the chunk is considered redundant.
+            Default 0.6 (60%). Lower values are more aggressive; higher values are more
+            permissive. Set to 1.0 to disable line-overlap deduplication entirely.
     """
     if not candidates:
         return []
@@ -60,8 +71,7 @@ def rank_and_deduplicate_results(
                     if overlap_start <= overlap_end:
                         overlap_lines = overlap_end - overlap_start + 1
                         item_lines = item.end_line - item.start_line + 1
-                        # If more than 60% of this chunk's lines overlap with an accepted chunk, skip
-                        if item_lines > 0 and (overlap_lines / item_lines) > 0.6:
+                        if item_lines > 0 and (overlap_lines / item_lines) > overlap_threshold:
                             is_redundant_overlap = True
                             break
 
