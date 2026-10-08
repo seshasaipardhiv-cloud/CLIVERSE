@@ -1,7 +1,7 @@
 # Member 2 Architecture Specification: RAG & Rules Intelligence
 
 **Subsystem:** CLIVERSE — Member 2 (Memory / RAG + Rules Intelligence)  
-**Status:** Stages 1, 2, 3, 3.5, 4, 5, 5.1 & 6 Complete — 142 Tests Green (Final Handoff Ready)  
+**Status:** All Stages (Stage 1 — Foundation, Stage 2 — Ingestion + Embedding Foundation, Stage 3 — Retrieval + Context Assembly, Stage 3.5 — RAG Validation + Hardening, Stage 4 — Rules Intelligence, Stage 5 — Unified Laya Intelligence Contract, Stage 5.1 — Integration Safety Hardening, Stage 6 — Real Cross-Member Integration, Final — Hardening + Handoff) Complete — 145 Tests Green (Final Handoff Ready)  
 **Authors:** Member 2 Engineering Lead  
 
 ---
@@ -89,7 +89,14 @@ CLIVERSE/
 ├── rag_rules_service.py     # Public facade consumed directly by Member 1 (Laya)
 ├── memory_rules_api.py      # FastAPI APIRouter consumed by Member 3 (Dashboard)
 └── tests/
-    └── test_memory_rules.py # Comprehensive unit and integration test suite
+    ├── test_memory_storage_models.py          # Storage & models (5 tests)
+    ├── test_ingestion_embeddings.py           # Ingestion & embeddings (12 tests)
+    ├── test_retrieval_context.py              # Retrieval & context (12 tests)
+    ├── test_rag_validation.py                 # RAG validation & edge cases (43 tests)
+    ├── test_rules_engine.py                   # Rules intelligence & resolver (29 tests)
+    ├── test_laya_intelligence_integration.py  # Facade integration (11 tests)
+    ├── test_stage51_hardening.py              # Safety & contract hardening (19 tests)
+    └── test_final_cross_member_integration.py # Real cross-member integration (14 tests)
 ```
 
 ---

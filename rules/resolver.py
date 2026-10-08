@@ -322,12 +322,19 @@ class RuleResolver:
         cli_rules = [r for r in winning_rules if not r.is_mandatory and r.scope == RuleScope.CLI]
         task_rules = [r for r in winning_rules if not r.is_mandatory and r.scope == RuleScope.TASK]
         global_rules = [r for r in winning_rules if not r.is_mandatory and r.scope == RuleScope.GLOBAL]
+        require_rules = [r for r in winning_rules if r.effect in (RuleEffect.REQUIRE, RuleEffect.ENFORCE)]
 
         lines: List[str] = ["### Applicable Rules", ""]
 
         if mandatory_rules:
             lines.append("[MANDATORY]")
             for r in mandatory_rules:
+                lines.append(f"- {r.description}")
+            lines.append("")
+
+        if require_rules:
+            lines.append("[REQUIRE]")
+            for r in require_rules:
                 lines.append(f"- {r.description}")
             lines.append("")
 

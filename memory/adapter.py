@@ -94,6 +94,16 @@ class CliverseMemoryProviderAdapter:
         self.service = service or LayaIntelligenceService()
         self.project_id = project_id
         self.cli_name = cli_name
+        self.last_intelligence_context: Optional[LayaIntelligenceContext] = None
+        self.last_member2_rules: Dict[str, Any] = {}
+
+    def get_last_intelligence_context(self) -> Optional[LayaIntelligenceContext]:
+        """Returns the full untruncated LayaIntelligenceContext from the latest call."""
+        return self.last_intelligence_context
+
+    def get_member2_rule(self, rule_id: str) -> Optional[Any]:
+        """Returns the complete Member 2 Rule model for a given rule_id."""
+        return self.last_member2_rules.get(rule_id)
 
     def retrieve_context(self, task: Any) -> ContextBundle:
         """
@@ -105,6 +115,7 @@ class CliverseMemoryProviderAdapter:
             project_id=self.project_id,
             cli_name=self.cli_name,
         )
+        self.last_intelligence_context = intel
         items = tuple(
             ContextItem(
                 item_id=f"mem-{idx}",
@@ -128,23 +139,49 @@ class CliverseMemoryProviderAdapter:
     def get_applicable_rules(self, task: Any) -> List[CliverseRule]:
         """
         Retrieves winning rules from Member 2 deterministic resolution and maps
-        them into Member 1's Rule dataclass.
+        them into Member 1's Rule dataclass without discarding critical semantics.
+        Preserves effect, mandatory state, target domain, and version.
         """
         intel: LayaIntelligenceContext = self.service.build_intelligence_context(
             task=task,
             project_id=self.project_id,
             cli_name=self.cli_name,
         )
-        return [
-            CliverseRule(
-                rule_id=r.rule_id,
-                content=r.description,
-                scope=r.scope.value.lower(),
-                priority=r.priority,
-                source=f"rules:{r.target}",
+        self.last_intelligence_context = intel
+        self.last_member2_rules = {r.rule_id: r for r in intel.rule_resolution.winning_rules}
+
+        result_rules: List[CliverseRule] = []
+        for r in intel.rule_resolution.winning_rules:
+            # Preserve effect and mandatory state prominently in content
+            if r.is_mandatory:
+                content_str = f"[{r.effect.value} MANDATORY] {r.description}"
+                # Ensure mandatory rules carry highest effective priority
+                effective_prio = 9999 + getattr(r, "effective_priority", r.priority)
+            else:
+                content_str = f"[{r.effect.value}] {r.description}"
+                effective_prio = getattr(r, "effective_priority", r.priority)
+
+            # Preserve structured metadata (effect, mandatory, version) in source provenance
+            source_str = (
+                f"rules:{r.target};effect={r.effect.value};mandatory={r.is_mandatory};version={r.version}"
             )
-            for r in intel.rule_resolution.winning_rules
-        ]
+
+            cliverse_rule = CliverseRule(
+                rule_id=r.rule_id,
+                content=content_str,
+                scope=r.scope.value.lower(),
+                priority=effective_prio,
+                source=source_str,
+            )
+            # Attach full untruncated Member 2 Rule instance for rich downstream access
+            try:
+                object.__setattr__(cliverse_rule, "_member2_rule", r)
+            except Exception:
+                pass
+
+            result_rules.append(cliverse_rule)
+
+        return result_rules
 
     def store_memory(self, data: Dict[str, Any]) -> MemoryRef:
         """Stores a memory record via Member 2 IngestionPipeline."""

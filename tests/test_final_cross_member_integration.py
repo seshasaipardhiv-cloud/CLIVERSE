@@ -619,6 +619,114 @@ class TestFinalCrossMemberIntegration(unittest.TestCase):
         self.assertLess(t_rules, 1.0)
         self.assertLess(t_context, 1.0)
 
+    # ── 12. ADAPTER INFORMATION LOSS PREVENTION (PHASE 7) ─────────────────────
+
+    def test_adapter_preserves_rule_semantics_without_information_loss(self):
+        """
+        Proves that converting Member 2 rules into Member 1 rules preserves:
+          - Mandatory state (tagged in content, recorded in source, elevated priority)
+          - Rule effects (REQUIRE, DENY, ASK, WARN)
+          - Target domain and version
+          - Full untruncated Member 2 Rule instance via _member2_rule and adapter lookup
+        """
+        # Create a mandatory global rule and a project prerequisite rule
+        self.service.create_rule(
+            Rule(
+                rule_id="mand-deny-keys",
+                name="Never Commit Keys",
+                scope=RuleScope.GLOBAL,
+                target="security",
+                effect=RuleEffect.DENY,
+                is_mandatory=True,
+                version=2,
+                description="Never commit private API keys.",
+            )
+        )
+        self.service.create_rule(
+            Rule(
+                rule_id="proj-require-lint",
+                name="Lint Prerequisite",
+                scope=RuleScope.PROJECT,
+                project_id="proj-cliverse",
+                target="quality",
+                effect=RuleEffect.REQUIRE,
+                version=1,
+                description="Linter must pass before push.",
+            )
+        )
+
+        cliverse_rules = self.adapter.get_applicable_rules(task="Commit code changes")
+        rules_by_id = {r.rule_id: r for r in cliverse_rules}
+
+        # 1. Mandatory DENY rule verification
+        mand_rule = rules_by_id.get("mand-deny-keys")
+        self.assertIsNotNone(mand_rule)
+        self.assertIn("[DENY MANDATORY]", mand_rule.content)
+        self.assertIn("mandatory=True", mand_rule.source)
+        self.assertIn("effect=DENY", mand_rule.source)
+        self.assertIn("version=2", mand_rule.source)
+        self.assertGreaterEqual(mand_rule.priority, 9999)  # Elevated priority
+
+        # 2. Project REQUIRE rule verification
+        req_rule = rules_by_id.get("proj-require-lint")
+        self.assertIsNotNone(req_rule)
+        self.assertIn("[REQUIRE]", req_rule.content)
+        self.assertIn("effect=REQUIRE", req_rule.source)
+        self.assertIn("mandatory=False", req_rule.source)
+
+        # 3. Direct access to untruncated Member 2 Rule models
+        m2_mand = getattr(mand_rule, "_member2_rule", None)
+        self.assertIsNotNone(m2_mand)
+        self.assertTrue(m2_mand.is_mandatory)
+        self.assertEqual(m2_mand.effect, RuleEffect.DENY)
+
+        lookup_m2 = self.adapter.get_member2_rule("mand-deny-keys")
+        self.assertIsNotNone(lookup_m2)
+        self.assertEqual(lookup_m2.description, "Never commit private API keys.")
+
+        # 4. Context preservation on adapter
+        last_ctx = self.adapter.get_last_intelligence_context()
+        self.assertIsNotNone(last_ctx)
+        self.assertEqual(last_ctx.rule_decision, RuleDecision.DENY)
+
+    # ── 13. NO DUPLICATE RULE EVALUATION (PHASE 9) ────────────────────────────
+
+    def test_no_duplicate_rule_evaluation_in_build_intelligence_context(self):
+        """
+        Verifies that get_applicable_rules is evaluated exactly once during
+        build_intelligence_context, with candidates passed into resolve_rules.
+        """
+        calls = {"get_applicable": 0}
+        orig_get_applicable = self.service.rules_engine.get_applicable_rules
+
+        def tracked_get_applicable(*args, **kwargs):
+            calls["get_applicable"] += 1
+            return orig_get_applicable(*args, **kwargs)
+
+        self.service.rules_engine.get_applicable_rules = tracked_get_applicable
+
+        _ = self.service.build_intelligence_context(task="Evaluate once test", project_id="proj-cliverse")
+
+        # Must be called exactly once (NOT twice)
+        self.assertEqual(calls["get_applicable"], 1)
+
+    # ── 14. TASK CONTRACT VALIDATION (PHASE 11) ───────────────────────────────
+
+    def test_invalid_task_inputs_rejected_clearly(self):
+        """Rejects empty string, whitespace, non-TaskLike types with clear errors."""
+        with self.assertRaises(ValueError):
+            self.service.build_intelligence_context(task="")
+
+        with self.assertRaises(ValueError):
+            self.service.build_intelligence_context(task="   \n\t  ")
+
+        with self.assertRaises(TypeError):
+            self.service.build_intelligence_context(task=12345)
+
+        with self.assertRaises(TypeError):
+            self.service.build_intelligence_context(task=None)
+
 
 if __name__ == "__main__":
     unittest.main()
+

@@ -183,10 +183,12 @@ def format_combined_laya_context(
             if r.effect == RuleEffect.ASK:
                 sections.append(f"Confirmation Required: {r.description}")
     elif rule_decision == RuleDecision.REQUIRE:
-        sections.append("Decision: REQUIRE")
+        sections.append("Decision: REQUIRE\n")
+        sections.append("[REQUIRE]")
         for r in winning:
             if r.effect in (RuleEffect.REQUIRE, RuleEffect.ENFORCE):
-                sections.append(f"Prerequisite Constraint: {r.description}")
+                sections.append(f"* Prerequisite Constraint: {r.description}")
+        sections.append("")
     elif rule_decision == RuleDecision.WARN:
         sections.append("Decision: WARN")
         for r in winning:
@@ -305,6 +307,7 @@ class LayaIntelligenceService:
                 cli_name=cli_name,
                 task_metadata=meta,
                 task_rules=task_rules,
+                applicable_rules=applicable_rules,
             )
             if applicable_rules:
                 rules_status = SubsystemStatus.OK_WITH_RESULTS
@@ -518,9 +521,20 @@ class LayaIntelligenceService:
 
     @staticmethod
     def _extract_task_text(task: Union[str, TaskLike, Any]) -> str:
-        """Extracts task string from str, TaskLike protocol, or object with .task attribute."""
+        """
+        Extracts task string from plain str or TaskLike protocol object (e.g. StructuredTask).
+        Rejects invalid or empty task inputs clearly.
+        """
         if isinstance(task, str):
+            clean = task.strip()
+            if not clean:
+                raise ValueError("Task text must not be empty or whitespace.")
             return task
         if hasattr(task, "task"):
-            return str(task.task)
-        return str(task)
+            val = getattr(task, "task")
+            if isinstance(val, str) and val.strip():
+                return val
+            raise ValueError("TaskLike object must provide a non-empty string in .task attribute.")
+        raise TypeError(
+            f"Invalid task input: expected str or TaskLike protocol object with .task attribute, got {type(task).__name__}."
+        )

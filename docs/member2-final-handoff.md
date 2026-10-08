@@ -1,8 +1,8 @@
 # Member 2 Final Handoff Specification
 
 **Subsystem:** CLIVERSE — Member 2 (Memory / RAG + Rules Intelligence)  
-**Status:** COMPLETE & FROZEN (All Stages 1–6 Verified)  
-**Test Suite:** 142 Tests Passing (Zero Regressions)  
+**Status:** COMPLETE & FROZEN (Milestones: Stage 1 — Foundation, Stage 2 — Ingestion + Embedding Foundation, Stage 3 — Retrieval + Context Assembly, Stage 3.5 — RAG Validation + Hardening, Stage 4 — Rules Intelligence, Stage 5 — Unified Laya Intelligence Contract, Stage 5.1 — Integration Safety Hardening, Stage 6 — Real Cross-Member Integration, Final — Hardening + Handoff)  
+**Test Suite:** 145 Tests Passing (Zero Regressions, Authoritative Verified Total)  
 **Authors:** Member 2 Engineering Lead
 
 ---
@@ -96,6 +96,14 @@ class SubsystemStatus(str, Enum):
 
 ## 4. Rule Decision Semantics & Hierarchy
 
+### Canonical Rule Effects:
+- **`ALLOW`**: Explicit permission or allowance.
+- **`WARN`**: Permitted with an advisory warning in planning prompt.
+- **`REQUIRE`**: Positive engineering constraint directive (e.g. "Tests must pass before commit"). Rendered with explicit `[REQUIRE]` tag in context.
+- **`ASK`**: Requires interactive user confirmation prior to execution.
+- **`DENY`**: Hard negative constraint prohibition.
+- *(Note: `ENFORCE` is maintained as a backward-compatible alias of `REQUIRE`. `UNKNOWN` is a result state representing evaluation failure).*
+
 ```python
 class RuleDecision(str, Enum):
     ALLOW   = "ALLOW"
@@ -115,6 +123,14 @@ $$\text{DENY (6)} \succ \text{ASK (5)} \succ \text{REQUIRE / ENFORCE (4)} \succ 
 
 ### Mandatory Guardrails:
 Any rule marked `is_mandatory=True` with `effect=DENY` in `GLOBAL` or `PROJECT` scope **cannot be overridden** by higher-scope rules.
+
+### Member 1 Adapter Semantic Preservation:
+When converting Member 2 rules to Member 1 `cliverse.contracts.Rule`:
+- Mandatory rules: `content = "[{effect} MANDATORY] {description}"`, `priority = 9999 + effective_priority`.
+- Non-mandatory rules: `content = "[{effect}] {description}"`, `priority = effective_priority`.
+- Rich provenance: `source = "rules:{target};effect={effect};mandatory={is_mandatory};version={version}"`.
+- Full model access: `cliverse_rule._member2_rule` references original `Rule`, and `adapter.get_member2_rule(rule_id)` retrieves it.
+- Zero duplicate evaluation: `build_intelligence_context` evaluates applicable rules once and passes them directly to `resolve_rules(applicable_rules=...)`.
 
 ---
 
@@ -164,6 +180,20 @@ python -m pytest tests/test_memory_storage_models.py \
                  tests/test_final_cross_member_integration.py -v
 ```
 
+### Machine-Verified Test Suite Breakdown:
+
+| Test File | Passed | Failed | Total | Primary Coverage |
+|---|---|---|---|---|
+| `tests/test_memory_storage_models.py` | 5 | 0 | 5 | Memory models, schemas, SQLite persistence |
+| `tests/test_ingestion_embeddings.py` | 12 | 0 | 12 | Normalization, chunking, deduplication, local embeddings |
+| `tests/test_retrieval_context.py` | 12 | 0 | 12 | Hybrid search, ranking, thresholding, context assembly |
+| `tests/test_rag_validation.py` | 43 | 0 | 43 | RAG validation suite, edge cases, deterministic behavior |
+| `tests/test_rules_engine.py` | 29 | 0 | 29 | Rule parsing, validation, scopes, resolver, conflict traces |
+| `tests/test_laya_intelligence_integration.py` | 11 | 0 | 11 | LayaIntelligenceService facade and integration |
+| `tests/test_stage51_hardening.py` | 19 | 0 | 19 | Safety hardening, tri-state statuses, error vs empty |
+| `tests/test_final_cross_member_integration.py` | 14 | 0 | 14 | Cross-member adapter, zero-duplicate eval, input validation |
+| **Total Member 2 Suite** | **145** | **0** | **145** | **Authoritative verified count** |
+
 ### Running RAG Evaluation:
 ```bash
 python scripts/evaluate_retrieval.py
@@ -194,10 +224,10 @@ Evaluated against 10 documents, 58 chunks, and 25 queries (`tests/fixtures/retri
 ## 9. Performance Baseline (Local Measurements)
 
 Measured on local SSD storage:
-- **Ingestion (10 docs):** ~54.2 ms (~5.4 ms / document)
-- **Rule Creation (10 rules):** ~9.9 ms (~1.0 ms / rule)
-- **Retrieval:** ~1.4 ms
-- **Rule Resolution:** ~59.2 ms
+- **Ingestion (10 docs):** ~58.2 ms (~5.8 ms / document)
+- **Rule Creation (10 rules):** ~11.4 ms (~1.1 ms / rule)
+- **Retrieval:** ~1.5 ms
+- **Rule Resolution:** ~63.0 ms
 - **Unified Context Construction:** ~19.8 ms
 
 ---

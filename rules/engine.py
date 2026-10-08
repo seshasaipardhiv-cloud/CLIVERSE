@@ -142,10 +142,11 @@ class RulesEngine:
         cli_name: Optional[str] = None,
         task_metadata: Optional[Dict[str, Any]] = None,
         task_rules: Optional[List[Rule]] = None,
+        applicable_rules: Optional[List[Rule]] = None,
     ) -> RuleResolution:
         """
         Full resolution pipeline:
-          1. Evaluates applicability across stored and task-level rules
+          1. Evaluates applicability across stored and task-level rules (if not pre-evaluated)
           2. Detects conflicts across matching target domains
           3. Applies mandatory safety overrides and deterministic precedence
           4. Generates an explainable decision trace and constraints prompt block
@@ -158,13 +159,16 @@ class RulesEngine:
         if hasattr(task, "as_dict") and callable(task.as_dict):
             meta.update(task.as_dict())
 
-        applicable = self.get_applicable_rules(
-            task=task_str,
-            project_id=project_id,
-            cli_name=cli_name,
-            task_metadata=meta,
-            task_rules=task_rules,
-        )
+        if applicable_rules is not None:
+            applicable = applicable_rules
+        else:
+            applicable = self.get_applicable_rules(
+                task=task_str,
+                project_id=project_id,
+                cli_name=cli_name,
+                task_metadata=meta,
+                task_rules=task_rules,
+            )
 
         return RuleResolver.resolve(
             task=task_str,
