@@ -67,15 +67,19 @@ their internals.
   - Verify: disposable Git repository with known changed and unrelated files.
   - Files: `src/cliverse/git_inspection.py`, tests, CLI.
   - Dependencies: M1-02, M1-06.
-  - Status: inspection is read-only. Git commit creation and filesystem
-    monitoring outside Git remain separate work.
+  - Status: inspection is read-only. Session-linked commit creation is in
+    M1-08; filesystem monitoring outside Git remains separate work.
 
-- [ ] **M1-08 — Add explicit recovery and undo**
+- [x] **M1-08 — Add explicit session-linked commit and recovery**
   - Acceptance: undo requires confirmation, rejects out-of-project paths and
     refuses to overwrite unrelated/uncommitted work.
   - Verify: restore tests in disposable repositories, including refusal cases.
-  - Files: `src/cliverse/recovery.py`, `src/cliverse/git/`, tests, docs.
+  - Files: `src/cliverse/git_commits.py`, `src/cliverse/recovery.py`, tests,
+    docs.
   - Dependencies: M1-07; Member 4 approval.
+  - Status: library commit/revert APIs require an injected authorizer and
+    explicit confirmation. CLI exposes read-only undo preview only; actual
+    mutation remains unavailable until Member 4 confirms the integration.
 
 - [ ] **M1-09 — Verify the Member 1 end-to-end path**
   - Acceptance: init → plan/clarify → guarded fake CLI → session/events → Git

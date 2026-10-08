@@ -207,6 +207,14 @@ class GitInspector:
             sections.append(completed.stdout)
         return "".join(sections)
 
+    def has_staged_changes(self) -> bool:
+        result = self._run_result(["diff", "--cached", "--quiet"])
+        if result.returncode == 0:
+            return False
+        if result.returncode == 1:
+            return True
+        raise GitCommandFailed(result.stderr.strip() or "Could not inspect the Git index.")
+
     def history(self, limit: int = 20) -> tuple[GitCommit, ...]:
         if not isinstance(limit, int) or isinstance(limit, bool) or not 1 <= limit <= self.MAX_HISTORY_LIMIT:
             raise InvalidGitRequest(f"History limit must be between 1 and {self.MAX_HISTORY_LIMIT}.")
@@ -239,6 +247,26 @@ class GitInspector:
                 )
             )
         return tuple(commits)
+
+    def commit_parents(self, commit_id: str) -> tuple[str, ...]:
+        self._validate_commit_id(commit_id)
+        result = self._run(["rev-list", "--parents", "-n", "1", commit_id])
+        values = result.stdout.strip().split()
+        if not values or values[0] != commit_id:
+            raise GitCommandFailed(f"Could not inspect commit: {commit_id}")
+        return tuple(values[1:])
+
+    def files_in_commit(self, commit_id: str) -> tuple[str, ...]:
+        self._validate_commit_id(commit_id)
+        result = self._run(
+            ["diff-tree", "--root", "--no-commit-id", "--name-only", "-r", "-z", commit_id]
+        )
+        return tuple(path for path in result.stdout.split("\x00") if path)
+
+    @staticmethod
+    def _validate_commit_id(commit_id: str) -> None:
+        if not re.fullmatch(r"[0-9a-fA-F]{40,64}", commit_id):
+            raise InvalidGitRequest("Commit ID must be a full hexadecimal object ID.")
 
     def inspect(self, limit: int = 20) -> GitInspection:
         return GitInspection(

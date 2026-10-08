@@ -93,3 +93,15 @@
 - Added `cliverse git status|diff|history`.
 - Verified: 35 core tests passed across committed/unborn repositories,
   untracked files, root containment and session trailer parsing.
+
+## 2026-10-08 — M1-08: add session-linked commit and recovery APIs
+
+- Added explicit-path commits with exact changed-path matching, no pre-staged
+  user changes, session trailers, confirmation and authorization.
+- Added undo preview and revert only for the clean current HEAD commit carrying
+  the requested session trailer; refuses dirty trees, unrelated HEADs and
+  merge commits. Git hooks are disabled for this controlled operation.
+- CLI exposes `git undo-preview`; commit and revert mutation remain library
+  only until Member 4 confirms a safe integration.
+- Verified: 9 Git inspection/commit tests and 5 recovery tests passed in
+  disposable repositories, including preservation of unrelated changes.

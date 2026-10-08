@@ -54,16 +54,22 @@ python3.11 env.py session finish --root /path/to/project <session-id>
 python3.11 env.py git status --root /path/to/project
 python3.11 env.py git diff --root /path/to/project
 python3.11 env.py git history --root /path/to/project
+python3.11 env.py git undo-preview --root /path/to/project --session-id <id>
 ```
 
 Git inspection is read-only. A history entry has a CLIVERSE session ID only
-when the commit contains a `CLIVERSE-Session:` trailer.
+when the commit contains a `CLIVERSE-Session:` trailer. Undo preview is
+read-only and will only show the current clean `HEAD` if it has the requested
+session trailer.
 
 ## Execution status and data boundaries
 
 - `execute_guarded()` is a library API only. It requires an injected
   authorizer; the CLI does not launch an external AI CLI until Member 4 confirms
   an authenticated, scoped integration.
+- Session-linked Git commit and revert are library APIs only and also require
+  explicit confirmation and an authorizer. The CLI does not perform Git
+  mutations until Member 4 confirms a safe integration.
 - Session requests and events are stored locally in
   `.envcore/cliverse.sqlite3`. The data is not encrypted at rest.
 - No RAG provider, model weights, hosted API or AI CLI is bundled or started.

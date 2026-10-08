@@ -13,6 +13,7 @@ from .environment import ProjectEnvironment
 from .errors import CliverseError
 from .git_inspection import GitInspector
 from .planning import PlanningRequest, RequestPlanner
+from .recovery import GitRecovery
 from .sessions import SessionStore
 
 
@@ -99,6 +100,12 @@ def _build_parser() -> argparse.ArgumentParser:
     git_history_parser = git_commands.add_parser("history", help="List recent commits")
     _add_root_argument(git_history_parser)
     git_history_parser.add_argument("--limit", type=int, default=20)
+    undo_preview_parser = git_commands.add_parser(
+        "undo-preview",
+        help="Preview a tagged session commit that may be eligible for undo",
+    )
+    _add_root_argument(undo_preview_parser)
+    undo_preview_parser.add_argument("--session-id", required=True)
     return parser
 
 
@@ -174,10 +181,21 @@ def main(argv: list[str] | None = None) -> int:
                 }
             elif args.git_command == "diff":
                 payload = {"ok": True, "diff": inspector.diff()}
-            else:
+            elif args.git_command == "history":
                 payload = {
                     "ok": True,
                     "commits": [asdict(commit) for commit in inspector.history(args.limit)],
+                }
+            else:
+                preview = GitRecovery(args.root).preview(args.session_id)
+                payload = {
+                    "ok": True,
+                    "status": "preview_only",
+                    "requires_confirmation": True,
+                    "requires_authorization": True,
+                    "session_id": preview.session_id,
+                    "target_commit": preview.target_commit,
+                    "changed_paths": list(preview.changed_paths),
                 }
             _emit(payload, args.human)
             return 0
