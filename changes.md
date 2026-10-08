@@ -36,3 +36,13 @@
 - Verified: 11 core CLI/environment/session tests passed, including persistence
   across store instances and refusal to mutate stored events.
 - No dependency installation, model download or hosted API use.
+
+## 2026-10-08 — M1-03: define cross-member provider contracts
+
+- Added typed task/context/rule/memory records and the four Member 2 provider
+  operations.
+- Added a Member 4 authorization request/result protocol; `BLOCK`, invalid
+  results and unconfirmed `WARN` fail closed.
+- Verified: 15 core tests passed, including authorization decision boundaries.
+- Member 2/4 owner confirmation is still pending; the proposed interfaces are
+  not represented as an agreed integration yet.

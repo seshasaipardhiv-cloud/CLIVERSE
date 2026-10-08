@@ -80,6 +80,9 @@ owns `memory-rules`; Member 3 owns `dashboard-ux`; Member 4 owns
 
 ## Cross-member interface contracts
 
+Proposed method signatures and the current integration gate are also recorded
+in [`docs/integration-contracts.md`](docs/integration-contracts.md).
+
 ### Member 2 — memory and rules
 
 Proposed synchronous provider contract; request/response schemas must be

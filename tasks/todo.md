@@ -20,13 +20,14 @@ their internals.
   - Files: `src/cliverse/sessions.py`, `src/cliverse/events.py`, tests.
   - Dependencies: M1-01.
 
-- [ ] **M1-03 — Define Member 2 and Member 4 provider contracts**
+- [ ] **M1-03 — Confirm Member 2 and Member 4 provider contracts**
   - Acceptance: context/rules and authorization have typed inputs/outputs;
     missing providers or exceptions do not silently allow execution.
   - Verify: contract tests for `ALLOW`, `WARN`, `BLOCK`, missing-provider and
     provider-failure outcomes.
   - Files: `src/cliverse/contracts.py`, `docs/integration-contracts.md`, tests.
-  - Dependencies: none; confirm shapes with Members 2 and 4 before integration.
+  - Status: Member 1's proposal and fail-closed decision types are implemented;
+    owner confirmation and provider-failure tests remain pending.
 
 - [ ] **M1-04 — Add the unchanged Laya decision adapter**
   - Acceptance: CLIVERSE calls only Laya's public typed-decision API; prompt
