@@ -10,6 +10,7 @@ Architecture note:
   It is NOT the final security or execution authorization (which is governed by Member 4).
 """
 
+from memory.adapter import CliverseMemoryProviderAdapter
 from memory.intelligence import (
     LayaIntelligenceContext,
     LayaIntelligenceService,
@@ -28,6 +29,7 @@ __all__ = [
     "LayaIntelligenceService",
     "RAGRulesService",
     "IntelligenceService",
+    "CliverseMemoryProviderAdapter",
     "SubsystemStatus",
     "RuleDecision",
     "TaskLike",
