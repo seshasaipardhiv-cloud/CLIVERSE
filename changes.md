@@ -68,3 +68,17 @@
   structured JSON task.
 - Automatic semantic ambiguity detection and live Laya inference remain
   unverified; caller-supplied clarification is the current boundary.
+
+## 2026-10-08 — M1-06: add guarded CLI process execution
+
+- Added argument-vector subprocess execution with `shell=False`, canonical
+  executable paths, explicit project cwd, bounded timeout and explicit child
+  environment (no inherited secrets by default).
+- Authorization is required before launch. Missing/invalid/BLOCK decisions
+  stop execution; WARN requires a separate confirmation. Non-zero exits and
+  timeouts remain explicit errors.
+- Verified: 30 core tests passed, including denial-before-launch, warning
+  confirmation, argument safety, environment scoping, timeout and non-zero
+  exit handling.
+- No public command can launch an AI CLI yet; integration awaits Member 4's
+  authenticated authorization contract.

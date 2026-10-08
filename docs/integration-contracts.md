@@ -46,3 +46,7 @@ The pre-existing Member 4 code remains untouched. The baseline inspection in
 no authentication and the default TrustGate is permissive. Members 1 and 4
 must agree on an authenticated, scoped integration before real external CLI
 execution is enabled.
+
+The current guarded process API is library-only and requires an injected
+authorizer. The CLI does not expose an external execution command while the
+Member 4 integration gate remains unresolved.

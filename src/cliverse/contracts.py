@@ -137,6 +137,10 @@ def require_authorized(
     ):
         raise InvalidAuthorizationDecision("Authorizer returned an invalid decision.")
     if decision.decision == Decision.ALLOW:
+        if decision.requires_confirmation:
+            raise InvalidAuthorizationDecision(
+                "An ALLOW decision cannot require an unresolved confirmation."
+            )
         return
     if decision.decision == Decision.WARN and warning_confirmed:
         return

@@ -50,12 +50,15 @@ their internals.
     retrieval remain pending; use `--without-memory` only for explicit
     context-free planning.
 
-- [ ] **M1-06 — Dispatch through a guarded CLI adapter**
+- [x] **M1-06 — Dispatch through a guarded CLI adapter**
   - Acceptance: adapter uses an argument vector, explicit cwd and timeout;
     policy `BLOCK` prevents launch; failure results remain failures.
-  - Verify: temporary fake executable for success, non-zero exit and timeout.
-  - Files: `src/cliverse/cli_adapters/`, `src/cliverse/execution.py`, tests.
+  - Verify: controlled local Python subprocess for success, non-zero exit and
+    timeout.
+  - Files: `src/cliverse/execution.py`, tests.
   - Dependencies: M1-02, M1-03, M1-05; Member 4 authorization contract.
+  - Status: guarded library adapter is tested with fake authorizers. No public
+    command invokes an external CLI until Member 4 confirms a safe integration.
 
 - [ ] **M1-07 — Track filesystem changes and Git history**
   - Acceptance: changed paths and diffs are reviewable and scoped to the
