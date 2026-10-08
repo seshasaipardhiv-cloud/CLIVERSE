@@ -46,3 +46,11 @@
 - Verified: 15 core tests passed, including authorization decision boundaries.
 - Member 2/4 owner confirmation is still pending; the proposed interfaces are
   not represented as an agreed integration yet.
+
+## 2026-10-08 — M1-04: add the Laya decision adapter
+
+- Added an adapter for the public `Router.predict(state, questions)` API.
+- The adapter requires a caller-injected router, validates the typed answer
+  envelope and never constructs a router or triggers checkpoint downloads.
+- Verified: 18 core tests passed, including fake-router response and error
+  cases. No live model inference was run.

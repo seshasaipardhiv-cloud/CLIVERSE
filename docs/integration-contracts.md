@@ -30,6 +30,15 @@ with a reason. Member 1 requires explicit user confirmation for `WARN`; an
 unknown decision, provider exception or missing authorizer cannot authorize
 execution.
 
+## Laya — typed decisions
+
+`LayaDecisionAdapter` accepts an already configured object implementing
+Laya's public `Router.predict(state, questions)` method. CLIVERSE does not
+construct the router: Laya may fetch checkpoint weights on first use, and
+neither the model nor its local availability is verified. Prompt generation
+and the `ROLE/CONTEXT/TASK/REQUIREMENTS/CONSTRAINTS/OUTPUT` structure remain
+separate CLIVERSE responsibilities.
+
 ## Current integration gate
 
 The pre-existing Member 4 code remains untouched. The baseline inspection in

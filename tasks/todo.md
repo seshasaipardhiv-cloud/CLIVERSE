@@ -29,12 +29,15 @@ their internals.
   - Status: Member 1's proposal and fail-closed decision types are implemented;
     owner confirmation and provider-failure tests remain pending.
 
-- [ ] **M1-04 — Add the unchanged Laya decision adapter**
+- [x] **M1-04 — Add the unchanged Laya decision adapter**
   - Acceptance: CLIVERSE calls only Laya's public typed-decision API; prompt
     construction remains separate; no source copy or model download occurs.
   - Verify: fake-router tests; live inference is separately marked pending.
-  - Files: `src/cliverse/laya_adapter.py`, `pyproject.toml`, tests, README.
+  - Files: `src/cliverse/laya_adapter.py`, `pyproject.toml`, tests,
+    `docs/integration-contracts.md`.
   - Dependencies: M1-03; local Laya dependency availability.
+  - Status: adapter accepts an explicitly injected router only; no checkpoint
+    is installed, downloaded or run.
 
 - [ ] **M1-05 — Plan tasks and ask clarification when inputs are missing**
   - Acceptance: clear requests yield `role/context/task/requirements/
