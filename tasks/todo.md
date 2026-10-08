@@ -13,7 +13,7 @@ their internals.
   - Files: `src/cliverse/`, `tests/`, `pyproject.toml`, `env.py`.
   - Dependencies: project contract (`PRD.md`).
 
-- [ ] **M1-02 — Persist sessions and core events**
+- [x] **M1-02 — Persist sessions and core events**
   - Acceptance: sessions have unique IDs and timestamped metadata; events are
     append-only; invalid input fails explicitly.
   - Verify: create/read/list tests using temporary SQLite databases.

@@ -25,3 +25,14 @@
   configuration, non-overwrite behavior, JSON output, help and version.
 - Verified: 5 targeted tests passed; CLI help and version commands succeeded.
 - No dependency installation, model download or hosted API use.
+
+## 2026-10-08 — M1-02: persist sessions and core events
+
+- Added SQLite-backed session creation, listing, detail retrieval, completion
+  status and bounded append-only event records.
+- Used bound SQL parameters, foreign keys, append-only event triggers and
+  explicit invalid/missing-session errors.
+- Added `cliverse session start|list|show|finish` JSON commands.
+- Verified: 11 core CLI/environment/session tests passed, including persistence
+  across store instances and refusal to mutate stored events.
+- No dependency installation, model download or hosted API use.
