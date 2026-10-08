@@ -149,6 +149,9 @@ public/             Reserved for Member 3 after UI/UX approval
 
 ## Commands and verification
 
+Current Member 1 checkout commands and their limitations are documented in
+[`docs/member1-usage.md`](docs/member1-usage.md).
+
 The initial test runner uses only the standard library:
 
 ```bash

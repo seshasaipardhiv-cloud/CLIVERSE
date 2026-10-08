@@ -82,3 +82,14 @@
   exit handling.
 - No public command can launch an AI CLI yet; integration awaits Member 4's
   authenticated authorization contract.
+
+## 2026-10-08 — M1-07: inspect project Git state
+
+- Added read-only Git status, staged/unstaged/untracked diff and bounded
+  history inspection, restricted to the selected repository root.
+- Disabled external diff/pagers, used argv execution and surfaced Git errors.
+- History extracts session IDs only from explicit `CLIVERSE-Session:` commit
+  trailers; it does not invent provenance.
+- Added `cliverse git status|diff|history`.
+- Verified: 35 core tests passed across committed/unborn repositories,
+  untracked files, root containment and session trailer parsing.

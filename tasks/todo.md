@@ -60,12 +60,15 @@ their internals.
   - Status: guarded library adapter is tested with fake authorizers. No public
     command invokes an external CLI until Member 4 confirms a safe integration.
 
-- [ ] **M1-07 — Track filesystem changes and Git history**
+- [x] **M1-07 — Inspect filesystem changes and Git history**
   - Acceptance: changed paths and diffs are reviewable and scoped to the
-    selected project; history identifies the originating session.
+    selected project; history reports a session only when a commit has an
+    explicit `CLIVERSE-Session:` trailer.
   - Verify: disposable Git repository with known changed and unrelated files.
-  - Files: `src/cliverse/git/`, `src/cliverse/filesystem.py`, tests.
+  - Files: `src/cliverse/git_inspection.py`, tests, CLI.
   - Dependencies: M1-02, M1-06.
+  - Status: inspection is read-only. Git commit creation and filesystem
+    monitoring outside Git remain separate work.
 
 - [ ] **M1-08 — Add explicit recovery and undo**
   - Acceptance: undo requires confirmation, rejects out-of-project paths and

@@ -11,6 +11,7 @@ from typing import Any
 from . import __version__
 from .environment import ProjectEnvironment
 from .errors import CliverseError
+from .git_inspection import GitInspector
 from .planning import PlanningRequest, RequestPlanner
 from .sessions import SessionStore
 
@@ -88,6 +89,16 @@ def _build_parser() -> argparse.ArgumentParser:
     _add_root_argument(finish_parser)
     finish_parser.add_argument("session_id")
     finish_parser.add_argument("--status", choices=("completed", "failed", "cancelled"), default="completed")
+
+    git_parser = commands.add_parser("git", help="Read-only Git status, diff and history")
+    git_commands = git_parser.add_subparsers(dest="git_command", required=True)
+    git_status_parser = git_commands.add_parser("status", help="List changed paths")
+    _add_root_argument(git_status_parser)
+    git_diff_parser = git_commands.add_parser("diff", help="Show tracked and untracked changes")
+    _add_root_argument(git_diff_parser)
+    git_history_parser = git_commands.add_parser("history", help="List recent commits")
+    _add_root_argument(git_history_parser)
+    git_history_parser.add_argument("--limit", type=int, default=20)
     return parser
 
 
@@ -147,6 +158,27 @@ def main(argv: list[str] | None = None) -> int:
             else:
                 session = store.finish_session(args.session_id, args.status)
                 payload = {"ok": True, "session": asdict(session)}
+            _emit(payload, args.human)
+            return 0
+
+        if args.command == "git":
+            inspector = GitInspector(args.root)
+            if args.git_command == "status":
+                status = inspector.status()
+                payload = {
+                    "ok": True,
+                    "project_root": status.project_root,
+                    "branch": status.branch,
+                    "is_clean": status.is_clean,
+                    "changed_paths": list(status.changed_paths),
+                }
+            elif args.git_command == "diff":
+                payload = {"ok": True, "diff": inspector.diff()}
+            else:
+                payload = {
+                    "ok": True,
+                    "commits": [asdict(commit) for commit in inspector.history(args.limit)],
+                }
             _emit(payload, args.human)
             return 0
 
