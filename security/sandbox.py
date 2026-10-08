@@ -29,7 +29,8 @@ class SandboxPolicy:
     mode: SandboxMode = SandboxMode.STRICT
     allowed_root: str = "."
     allowed_commands: list[str] = field(default_factory=lambda: [
-        "git", "python", "node", "npm", "pip", "ls", "cat", "echo", "pytest", "uvicorn", "cargo", "go"
+        "git", "python", "node", "npm", "pip", "ls", "cat", "echo", "pytest", "uvicorn", "cargo", "go",
+        "claude", "gemini", "codex", "aider"
     ])
     blocked_commands: list[str] = field(default_factory=lambda: [
         "rm -rf /", "dd if=", "mkfs", "shutdown", "reboot", ":(){:|:&};:", "chmod 777 /"
@@ -185,10 +186,12 @@ class Sandbox:
 
         if self.policy.mode == SandboxMode.STRICT and self.policy.allowed_commands:
             cmd_base = command.strip().split()[0] if command.strip() else ""
-            # Handle path/arguments in cmd_base
+            # Handle path/arguments in cmd_base (support Windows .exe, .cmd, .bat stems)
             cmd_name = Path(cmd_base).name.lower()
-            allowed_names = [Path(c).name.lower() for c in self.policy.allowed_commands]
-            if cmd_name not in allowed_names and not any(command.startswith(c) for c in self.policy.allowed_commands):
+            cmd_stem = Path(cmd_base).stem.lower()
+            allowed_names = {Path(c).name.lower() for c in self.policy.allowed_commands}
+            allowed_stems = {Path(c).stem.lower() for c in self.policy.allowed_commands}
+            if (cmd_name not in allowed_names and cmd_stem not in allowed_stems) and not any(command.startswith(c) for c in self.policy.allowed_commands):
                 return SandboxViolation(
                     operation="execute",
                     reason=f"Command binary '{cmd_base}' is not in sandbox allowlist (Strict Mode)",

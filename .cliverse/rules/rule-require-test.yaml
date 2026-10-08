@@ -1,0 +1,17 @@
+rule_id: rule-require-test
+name: Pre-Commit Test Requirement
+scope: PROJECT
+scope_id: null
+description: All automated unit tests must pass before staging or committing changes.
+target: tests
+effect: REQUIRE
+priority: 90
+is_mandatory: false
+cli_filter: null
+project_id: cliverse-core
+enabled: true
+version: 1
+conditions: []
+created_at: '2026-10-08T09:34:30.116432+00:00'
+updated_at: null
+metadata: {}

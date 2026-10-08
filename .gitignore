@@ -13,3 +13,9 @@ cliverse_test_*/
 env/
 venv/
 ENV/
+
+# Build artifacts & temporary files
+*.egg-info/
+.aider*
+scratch_*.txt
+

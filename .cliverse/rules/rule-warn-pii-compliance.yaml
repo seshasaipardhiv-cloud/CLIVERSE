@@ -1,0 +1,17 @@
+rule_id: rule-warn-pii-compliance
+name: Sensitive Data Compliance Gate
+scope: PROJECT
+scope_id: null
+description: Handling user biometric or payment card data triggers a regulatory review.
+target: compliance
+effect: WARN
+priority: 80
+is_mandatory: false
+cli_filter: null
+project_id: cliverse-core
+enabled: true
+version: 1
+conditions: []
+created_at: '2026-10-08T09:34:30.119415+00:00'
+updated_at: null
+metadata: {}

@@ -106,6 +106,30 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     _add_root_argument(undo_preview_parser)
     undo_preview_parser.add_argument("--session-id", required=True)
+
+    # AI CLI Provider commands
+    providers_parser = commands.add_parser("providers", help="List AI CLI provider detection status")
+    _add_root_argument(providers_parser)
+    providers_parser.add_argument("--human", action="store_true", help="Display readable summary")
+
+    run_parser = commands.add_parser("run", help="Execute task with real AI CLI provider")
+    run_parser.add_argument("task", help="User task to execute")
+    run_parser.add_argument("--cli", required=True, choices=("claude", "gemini", "codex", "aider"), help="AI CLI provider")
+    _add_root_argument(run_parser)
+    run_parser.add_argument("--confirm-warning", action="store_true", help="Confirm TrustGate warnings")
+    run_parser.add_argument("--timeout", type=float, default=300.0, help="Execution timeout in seconds")
+    run_parser.add_argument("--human", action="store_true", help="Display formatted readable stream")
+    run_parser.add_argument("--json", action="store_true", help="Output JSON instead of readable stream")
+
+    for provider_name in ("claude", "gemini", "codex", "aider"):
+        p_parser = commands.add_parser(provider_name, help=f"Run task using real {provider_name.capitalize()} CLI")
+        p_parser.add_argument("task", help="User task to execute")
+        _add_root_argument(p_parser)
+        p_parser.add_argument("--confirm-warning", action="store_true", help="Confirm TrustGate warnings")
+        p_parser.add_argument("--timeout", type=float, default=300.0, help="Execution timeout in seconds")
+        p_parser.add_argument("--human", action="store_true", help="Display formatted readable stream")
+        p_parser.add_argument("--json", action="store_true", help="Output JSON instead of readable stream")
+
     return parser
 
 
@@ -118,6 +142,93 @@ def main(argv: list[str] | None = None) -> int:
     }
 
     try:
+        if args.command == "providers":
+            from .providers import provider_registry
+            providers = provider_registry.list_providers(force_refresh=True)
+            if args.human:
+                print("CLIVERSE CLI PROVIDERS")
+                print("─" * 42)
+                for p in providers:
+                    status_symbol = "✓" if p.is_available else "✗"
+                    print(f"{status_symbol} {p.display_name}")
+                    print(f"  command:    {p.command_name}")
+                    print(f"  status:     {p.status.value}")
+                    if p.executable_path:
+                        print(f"  path:       {p.executable_path}")
+                    if p.version:
+                        print(f"  version:    {p.version}")
+                    print()
+                print("─" * 42)
+            else:
+                _emit({"ok": True, "providers": [p.to_dict() for p in providers]}, False)
+            return 0
+
+        if args.command in ("run", "claude", "gemini", "codex", "aider"):
+            from pathlib import Path
+            from .orchestrator import ExecutionOrchestrator
+            provider = getattr(args, "cli", None) or args.command
+            root = getattr(args, "root", ".")
+            task = args.task
+            user_confirmed = getattr(args, "confirm_warning", False)
+            timeout = getattr(args, "timeout", 300.0)
+            use_json = getattr(args, "json", False)
+
+            if not use_json:
+                print("CLIVERSE")
+                print("─" * 42)
+                print(f"Project       {Path(root).resolve()}")
+                print(f"Provider      {provider.capitalize()}")
+                print(f"Task          {task}")
+                print()
+
+            def _on_stdout(line: str) -> None:
+                if not use_json:
+                    sys.stdout.write(line)
+                    sys.stdout.flush()
+
+            def _on_stderr(line: str) -> None:
+                if not use_json:
+                    sys.stderr.write(line)
+                    sys.stderr.flush()
+
+            def _event_sink(evt) -> None:
+                if use_json:
+                    return
+                if evt.phase == "MEMORY":
+                    print(f"MEMORY\n✓ {evt.message}\n")
+                elif evt.phase == "TRUSTGATE":
+                    if "Authorized" in evt.message:
+                        print(f"TRUSTGATE\n✓ {evt.message}\n")
+                    elif "BLOCKED" in evt.message:
+                        print(f"TRUSTGATE\n✗ {evt.message}\n")
+                elif evt.phase == "EXECUTION" and "Spawning" in evt.message:
+                    print(f"EXECUTION\n→ Starting {provider.capitalize()}...\n")
+
+            orchestrator = ExecutionOrchestrator(project_root=root, event_sink=_event_sink)
+            result = orchestrator.run(
+                provider_name=provider,
+                task=task,
+                user_confirmed=user_confirmed,
+                timeout_seconds=timeout,
+                on_stdout=_on_stdout,
+                on_stderr=_on_stderr,
+            )
+
+            if use_json:
+                _emit(result.to_dict(), False)
+            else:
+                print()
+                if result.ok:
+                    print(f"✓ {provider.capitalize()} exited with code {result.returncode}")
+                else:
+                    print(f"✗ {provider.capitalize()} failed: {result.error_message or result.status} (exit code {result.returncode})")
+
+                print(f"\nSession:      {result.session_id}")
+                print(f"Duration:     {result.duration_seconds:.2f}s")
+                print("Dashboard:    http://127.0.0.1:8000")
+                print("─" * 42)
+            return result.returncode if result.returncode >= 0 else 1
+
         if args.command == "plan":
             result = RequestPlanner(
                 allow_context_free=args.without_memory
@@ -145,7 +256,12 @@ def main(argv: list[str] | None = None) -> int:
 
         if args.command == "session":
             environment = ProjectEnvironment.load(args.root)
-            store = SessionStore(environment.metadata_dir / "cliverse.sqlite3")
+            db_candidates = [
+                environment.metadata_dir / "sessions" / "sessions.db",
+                environment.metadata_dir / "cliverse.sqlite3",
+            ]
+            db_path = next((p for p in db_candidates if p.exists()), environment.metadata_dir / "sessions" / "sessions.db")
+            store = SessionStore(db_path)
             if args.session_command == "start":
                 session = store.create_session(environment.root, args.request)
                 payload = {"ok": True, "session": asdict(session)}
@@ -234,3 +350,8 @@ def main(argv: list[str] | None = None) -> int:
         args.human,
     )
     return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
+
