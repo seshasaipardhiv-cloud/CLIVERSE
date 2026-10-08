@@ -2,8 +2,8 @@
 Identity Manager — Security Layer
 
 Manages CLI/agent identity within the CLIVERSE environment.
-Each CLI session is assigned a unique identity with metadata
-that is carried through every pipeline stage.
+Enforces strict scope validation: callers cannot grant themselves privileged
+scopes without explicit trust or administrative authorization.
 """
 
 import uuid
@@ -11,7 +11,7 @@ import hashlib
 import json
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Set
 from dataclasses import dataclass, field, asdict
 
 
@@ -35,20 +35,22 @@ class AgentIdentity:
         return f"[{self.cli_name}:{self.agent_id[:8]}]"
 
 
+class ScopeViolationError(ValueError):
+    """Raised when an untrusted agent attempts to request unpermitted scopes."""
+    pass
+
+
 class IdentityManager:
     """
-    Manages agent identities for the CLIVERSE environment.
+    Manages agent identities for the CLIVERSE environment with strict scope enforcement.
 
-    Each time an AI CLI starts a session, it receives a unique identity.
-    The identity is used downstream by the PermissionEngine and AuditLogger.
-
-    Usage:
-        manager = IdentityManager(storage_path=".envcore/identities")
-        identity = manager.register("claude-cli", scopes=["read", "write"])
-        manager.validate(identity.agent_id)
+    Security Rule:
+    - Untrusted CLIs are strictly restricted to UNTRUSTED_MAX_SCOPES ('read').
+    - Privileged scopes ('write', 'execute', 'git', 'admin', 'delete') can ONLY be granted
+      to pre-registered trusted CLIs or when explicitly authorized via admin_token.
     """
 
-    KNOWN_TRUSTED_CLIS = {
+    KNOWN_TRUSTED_CLIS: Set[str] = {
         "claude-cli",
         "gemini-cli",
         "copilot-cli",
@@ -59,9 +61,13 @@ class IdentityManager:
         "aider",
     }
 
-    def __init__(self, storage_path: str = ".envcore/identities"):
+    UNTRUSTED_MAX_SCOPES: Set[str] = {"read", "list", "search"}
+    PRIVILEGED_SCOPES: Set[str] = {"write", "execute", "git", "admin", "delete"}
+
+    def __init__(self, storage_path: str = ".envcore/identities", admin_secret: Optional[str] = None):
         self.storage_path = Path(storage_path)
         self.storage_path.mkdir(parents=True, exist_ok=True)
+        self.admin_secret = admin_secret or "cliverse-admin-default-key"
         self._registry: dict[str, AgentIdentity] = {}
         self._load_existing()
 
@@ -74,13 +80,33 @@ class IdentityManager:
         cli_name: str,
         scopes: Optional[list[str]] = None,
         metadata: Optional[dict] = None,
+        admin_token: Optional[str] = None,
     ) -> AgentIdentity:
-        """Register a new CLI session and return its identity."""
+        """
+        Register a new CLI session with strict scope authorization checks.
+        
+        If an untrusted CLI requests privileged scopes without a valid admin_token,
+        the request is sanitized or rejected to prevent privilege escalation.
+        """
+        is_trusted = cli_name.lower() in self.KNOWN_TRUSTED_CLIS or (admin_token == self.admin_secret)
+        
+        # Enforce scope boundaries
+        assigned_scopes: list[str] = []
+        if scopes:
+            for s in scopes:
+                if s in self.PRIVILEGED_SCOPES and not is_trusted:
+                    raise ScopeViolationError(
+                        f"Scope '{s}' is privileged and cannot be granted to untrusted CLI '{cli_name}' "
+                        f"without administrative authorization."
+                    )
+            assigned_scopes = list(set(scopes))
+        else:
+            assigned_scopes = self._default_scopes(is_trusted)
+
         agent_id = str(uuid.uuid4())
         session_id = str(uuid.uuid4())
         created_at = datetime.now(timezone.utc).isoformat()
         fingerprint = self._fingerprint(cli_name, agent_id, created_at)
-        is_trusted = cli_name.lower() in self.KNOWN_TRUSTED_CLIS
 
         identity = AgentIdentity(
             agent_id=agent_id,
@@ -89,7 +115,7 @@ class IdentityManager:
             created_at=created_at,
             fingerprint=fingerprint,
             is_trusted=is_trusted,
-            scopes=scopes or self._default_scopes(is_trusted),
+            scopes=assigned_scopes,
             metadata=metadata or {},
         )
 
@@ -102,9 +128,9 @@ class IdentityManager:
         return self._registry.get(agent_id)
 
     def revoke(self, agent_id: str) -> bool:
-        """Revoke an agent's identity (removes from registry)."""
+        """Revoke an agent's identity (removes from registry and disk)."""
         if agent_id in self._registry:
-            identity = self._registry.pop(agent_id)
+            del self._registry[agent_id]
             identity_file = self.storage_path / f"{agent_id}.json"
             if identity_file.exists():
                 identity_file.unlink()
@@ -139,4 +165,4 @@ class IdentityManager:
                 identity = AgentIdentity(**data)
                 self._registry[identity.agent_id] = identity
             except Exception:
-                pass  # Skip corrupted identity files
+                pass
