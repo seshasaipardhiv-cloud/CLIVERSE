@@ -1,0 +1,304 @@
+{
+  "version": "1.0",
+  "description": "CLIVERSE Member 2 RAG Retrieval Evaluation Dataset — 25 realistic queries covering 10 categories. Includes both lexical-match and paraphrase queries to honestly test retrieval quality.",
+  "project_id": "cliverse-eval",
+  "documents": [
+    {
+      "id": "doc-arch",
+      "source_path": "docs/architecture.md",
+      "source_type": "doc",
+      "title": "System Architecture",
+      "content": "# CLIVERSE System Architecture\n\nCLIVERSE is a local-first AI development environment that sits above existing AI CLIs and provides persistent memory, structured reasoning, and user-defined rules.\n\n## Core Components\n\nThe system consists of four core members:\n- Member 1 (Laya): Core execution engine and CLI orchestration\n- Member 2: Memory, RAG, and rules intelligence\n- Member 3: Dashboard and frontend visualization\n- Member 4: Security, governance, and audit trail\n\n## Design Principles\n\nThe architecture prioritizes local-first execution. All persistent storage uses SQLite for zero-dependency deployment. The system supports plugin-based extensibility through a rules engine and provider abstraction layer.\n\n## Data Flow\n\nUser tasks are processed by Laya. Laya calls Member 2 to retrieve relevant context before generating a response. Retrieved context is injected into the prompt as a ContextPacket. The rules engine applies any matching rules at the task level."
+    },
+    {
+      "id": "doc-database",
+      "source_path": "docs/database.md",
+      "source_type": "doc",
+      "title": "Database Design",
+      "content": "# Database Design\n\n## Primary Storage\n\nThe backend persists application data in SQLite. This was selected for zero-dependency local-first deployment. Each project gets its own isolated database file under .envcore/memory/.\n\n## Schema\n\nThe database contains three primary tables:\n- memory_records: Top-level indexed documents\n- memory_chunks: Atomic searchable chunks with embeddings\n- conversation_turns: Session conversation history\n\n## Embedding Storage\n\nVector embeddings are stored as JSON-serialized float arrays in a TEXT column. Cosine similarity is computed in Python rather than using a vector database extension.\n\n## Why Not PostgreSQL?\n\nPostgreSQL was considered but rejected because it requires a running server process, which conflicts with the local-first zero-dependency requirement.\n\n## Why Not MongoDB?\n\nMongoDB was also evaluated and rejected for the same server-dependency reason. The document model does not offer meaningful advantages over SQLite for this workload."
+    },
+    {
+      "id": "doc-auth",
+      "source_path": "docs/authentication.md",
+      "source_type": "doc",
+      "title": "Authentication Design",
+      "content": "# Authentication Design\n\n## Token-Based Authentication\n\nThe system uses JWT bearer tokens for authenticating API requests. Tokens are signed using RS256 (RSA Signature with SHA-256). Token expiry is set to 24 hours by default for access tokens.\n\n## Session Management\n\nUser sessions are tracked using session_id fields throughout the memory system. Each CLI session receives a unique session identifier that propagates through ingestion, storage, and retrieval.\n\n## Trust Model\n\nThe trust gate validates that callers have appropriate permissions before executing sensitive operations. The security layer enforces identity registration and permission scope enforcement.\n\n## Refresh Tokens\n\nRefresh tokens have a 30-day expiry. Sessions are invalidated on explicit logout. There is no server-side session state — all state is carried in the signed token."
+    },
+    {
+      "id": "doc-api",
+      "source_path": "docs/api-design.md",
+      "source_type": "doc",
+      "title": "API Design Conventions",
+      "content": "# API Design Conventions\n\n## Internal Interfaces\n\nMember 2 exposes retrieval through the RetrievalService class. The public interface is search_memory() and retrieve_context(). All public methods accept optional project_id for multi-tenant isolation. The ContextPacket return type is the canonical interface for Laya consumption.\n\n## No REST Until Stage 5\n\nREST endpoints are explicitly deferred until Stage 5. All current integration is through direct Python module imports. There are no HTTP endpoints in Stage 1, 2, or 3.\n\n## Error Handling\n\nAll retrieval methods must return empty lists or empty ContextPackets rather than raising exceptions for missing data or no results. The caller must handle empty responses gracefully.\n\n## Versioning\n\nThe internal API is not yet versioned. Breaking changes will be coordinated across all four members during major stage transitions."
+    },
+    {
+      "id": "doc-testing",
+      "source_path": "docs/testing-strategy.md",
+      "source_type": "doc",
+      "title": "Testing Strategy",
+      "content": "# Testing Strategy\n\n## Framework\n\nThe project uses pytest with unittest for all unit and integration tests. All tests must be deterministic and independent. Tests must not depend on external services, the internet, or shared state.\n\n## Test Organization\n\nTests are organized by stage:\n- test_memory_storage_models.py: Stage 1 (models and storage)\n- test_ingestion_embeddings.py: Stage 2 (ingestion pipeline)\n- test_retrieval_context.py: Stage 3 (retrieval and context assembly)\n- test_bug_fixes.py: Regression tests for identified bugs\n- test_rag_validation.py: Stage 3.5 RAG quality validation\n\n## Coverage Requirements\n\nEvery new feature must ship with tests. No fabricated metrics or hard-coded expected results are permitted. Integration tests must use temporary in-memory or temp-file databases.\n\n## Prohibited Practices\n\nTests that only exercise keyword matches without paraphrase coverage are insufficient for RAG validation. Mock return values that skip the real retrieval path are not permitted in RAG quality tests."
+    },
+    {
+      "id": "doc-config",
+      "source_path": "docs/configuration.md",
+      "source_type": "doc",
+      "title": "Configuration Management",
+      "content": "# Configuration Management\n\n## Database Path\n\nThe default SQLite database path is .envcore/memory/cliverse_memory.db. This can be overridden by passing db_path to SQLiteMemoryStorage during instantiation.\n\n## Embedding Configuration\n\nThe default embedding provider is LocalBaselineEmbeddingProvider with dimension=64. For production deployments, neural providers such as Ollama or SentenceTransformers can be substituted by implementing the EmbeddingProvider abstract base class.\n\n## Chunking Configuration\n\nDefault chunk_size is 500 characters. Default chunk_overlap is 50 characters. These settings can be tuned via TextChunker constructor arguments. Larger chunks preserve more context but reduce retrieval precision.\n\n## Score Weights\n\nThe hybrid retrieval uses 0.7 semantic weight and 0.3 lexical weight by default. The min_score threshold defaults to 0.35 for search_memory() and retrieve_context()."
+    },
+    {
+      "id": "doc-conventions",
+      "source_path": "docs/conventions.md",
+      "source_type": "doc",
+      "title": "Code Conventions",
+      "content": "# Code Conventions\n\n## Python Style\n\nThe codebase follows PEP 8 with the following additions:\n- All public functions must have type annotations\n- Docstrings use the Google style format\n- Maximum line length is 100 characters\n\n## Module Organization\n\nEach Member owns a clearly scoped Python package:\n- memory/ and rules/ belong to Member 2\n- core/ belongs to Member 1 (Laya execution)\n- dashboard/ belongs to Member 3\n- security/, audit/, governance/ belong to Member 4\n\n## Naming Conventions\n\nClasses use PascalCase. Functions and variables use snake_case. Constants use UPPER_SNAKE_CASE. Private methods are prefixed with a single underscore. Test functions are prefixed with test_."
+    },
+    {
+      "id": "dec-database",
+      "source_path": "decisions/database-selection.md",
+      "source_type": "decision",
+      "title": "Decision: Database Selection",
+      "content": "# Decision: Database Selection\n\nDate: 2026-01-15\nStatus: Accepted\n\n## Decision\n\nWe selected SQLite as the primary persistence layer for CLIVERSE memory.\n\n## Rationale\n\n1. Zero external dependencies — no server process required\n2. Single file storage — easy backup and portability\n3. Python standard library support via sqlite3 module\n4. Sufficient performance for local development workloads\n5. Simple schema migration path for future versions\n\n## Alternatives Rejected\n\n- PostgreSQL: Requires running server process, conflicts with local-first zero-dependency design\n- MongoDB: Same server-dependency issue; document model adds no value for this workload\n- Redis: In-memory only by default, requires additional persistence configuration, no durable storage guarantee"
+    },
+    {
+      "id": "dec-auth",
+      "source_path": "decisions/auth-mechanism.md",
+      "source_type": "decision",
+      "title": "Decision: Authentication Mechanism",
+      "content": "# Decision: Authentication Mechanism\n\nDate: 2026-01-20\nStatus: Accepted\n\n## Decision\n\nJWT bearer tokens using RS256 signing are the selected authentication mechanism for CLIVERSE.\n\n## Rationale\n\n1. Stateless — no server-side session storage required\n2. Portable — tokens can be validated without database lookups\n3. Standard — widely supported across tooling and libraries\n4. RS256 — asymmetric signing allows public key verification without exposing private key\n\n## Token Lifecycle\n\n- Access tokens expire after 24 hours\n- Refresh tokens expire after 30 days\n- Sessions are invalidated on explicit logout\n- No server-side session state is maintained"
+    },
+    {
+      "id": "dec-frontend",
+      "source_path": "decisions/frontend-framework.md",
+      "source_type": "decision",
+      "title": "Decision: Frontend Framework",
+      "content": "# Decision: Frontend Framework\n\nDate: 2026-01-25\nStatus: Accepted\n\n## Decision\n\nThe dashboard (Member 3) uses React with TypeScript as the frontend framework.\n\n## Rationale\n\n1. Component-based architecture suits the dashboard panel design\n2. Strong TypeScript support ensures type safety across the UI layer\n3. Large ecosystem provides data visualization components out of the box\n\n## Build Tooling\n\nVite is used as the build tool for fast development iteration. The dashboard is served as a sidecar process alongside the main CLI. Hot module replacement is supported for rapid frontend development."
+    }
+  ],
+  "queries": [
+    {
+      "id": "q-01",
+      "query": "What is the overall architecture of CLIVERSE?",
+      "category": "architecture",
+      "expected_sources": ["docs/architecture.md"],
+      "is_paraphrase": false,
+      "lexical_overlap": "high",
+      "notes": "Contains 'architecture' keyword directly"
+    },
+    {
+      "id": "q-02",
+      "query": "How is the system designed and what are its main design principles?",
+      "category": "architecture",
+      "expected_sources": ["docs/architecture.md"],
+      "is_paraphrase": true,
+      "lexical_overlap": "medium",
+      "notes": "Paraphrase — 'design principles' appears in doc but 'system designed' is indirect"
+    },
+    {
+      "id": "q-03",
+      "query": "What are the four core members of the platform?",
+      "category": "architecture",
+      "expected_sources": ["docs/architecture.md"],
+      "is_paraphrase": true,
+      "lexical_overlap": "medium",
+      "notes": "Contains 'four core members' which appears verbatim in doc"
+    },
+    {
+      "id": "q-04",
+      "query": "What database does the application use for persistent storage?",
+      "category": "database",
+      "expected_sources": ["docs/database.md", "decisions/database-selection.md"],
+      "is_paraphrase": false,
+      "lexical_overlap": "high",
+      "notes": "Direct — 'database', 'persistent storage' appear in both docs"
+    },
+    {
+      "id": "q-05",
+      "query": "Which persistence technology was selected for the project?",
+      "category": "database",
+      "expected_sources": ["decisions/database-selection.md"],
+      "is_paraphrase": true,
+      "lexical_overlap": "low",
+      "notes": "Pure paraphrase — 'persistence technology' does not appear verbatim; tests semantic understanding"
+    },
+    {
+      "id": "q-06",
+      "query": "Why was PostgreSQL rejected as the database?",
+      "category": "database",
+      "expected_sources": ["decisions/database-selection.md", "docs/database.md"],
+      "is_paraphrase": false,
+      "lexical_overlap": "high",
+      "notes": "Direct — 'PostgreSQL', 'rejected' appear in both decision and database docs"
+    },
+    {
+      "id": "q-07",
+      "query": "What is stored in the memory_chunks table?",
+      "category": "database",
+      "expected_sources": ["docs/database.md"],
+      "is_paraphrase": false,
+      "lexical_overlap": "high",
+      "notes": "Direct keyword match on 'memory_chunks'"
+    },
+    {
+      "id": "q-08",
+      "query": "How does the system handle data persistence across restarts?",
+      "category": "database",
+      "expected_sources": ["docs/database.md", "decisions/database-selection.md"],
+      "is_paraphrase": true,
+      "lexical_overlap": "low",
+      "notes": "Paraphrase — 'restarts', 'data persistence across' do not appear verbatim"
+    },
+    {
+      "id": "q-09",
+      "query": "What authentication mechanism is used?",
+      "category": "authentication",
+      "expected_sources": ["docs/authentication.md", "decisions/auth-mechanism.md"],
+      "is_paraphrase": false,
+      "lexical_overlap": "high",
+      "notes": "Direct — 'authentication mechanism' appears in both docs"
+    },
+    {
+      "id": "q-10",
+      "query": "How does the system verify caller identity?",
+      "category": "authentication",
+      "expected_sources": ["docs/authentication.md"],
+      "is_paraphrase": true,
+      "lexical_overlap": "low",
+      "notes": "Paraphrase — 'verify caller identity' is indirect; tests understanding"
+    },
+    {
+      "id": "q-11",
+      "query": "What signing algorithm is used for JWT tokens?",
+      "category": "authentication",
+      "expected_sources": ["decisions/auth-mechanism.md", "docs/authentication.md"],
+      "is_paraphrase": false,
+      "lexical_overlap": "high",
+      "notes": "Direct — 'JWT', 'signing', 'RS256' appear verbatim"
+    },
+    {
+      "id": "q-12",
+      "query": "How long before an access token expires?",
+      "category": "authentication",
+      "expected_sources": ["decisions/auth-mechanism.md", "docs/authentication.md"],
+      "is_paraphrase": false,
+      "lexical_overlap": "medium",
+      "notes": "Semi-direct — 'access token' appears; 'expires' not exact but close"
+    },
+    {
+      "id": "q-13",
+      "query": "What is the public interface that Laya uses to get context?",
+      "category": "api",
+      "expected_sources": ["docs/api-design.md"],
+      "is_paraphrase": false,
+      "lexical_overlap": "high",
+      "notes": "Direct — 'public interface', 'Laya', 'context' appear in api-design.md"
+    },
+    {
+      "id": "q-14",
+      "query": "When will HTTP endpoints be available?",
+      "category": "api",
+      "expected_sources": ["docs/api-design.md"],
+      "is_paraphrase": true,
+      "lexical_overlap": "low",
+      "notes": "Paraphrase — 'HTTP endpoints' vs 'REST endpoints'; tests vocabulary generalization"
+    },
+    {
+      "id": "q-15",
+      "query": "What happens when no memory matches a retrieval query?",
+      "category": "api",
+      "expected_sources": ["docs/api-design.md"],
+      "is_paraphrase": true,
+      "lexical_overlap": "low",
+      "notes": "Paraphrase — 'no memory matches' maps to 'empty responses' in the doc"
+    },
+    {
+      "id": "q-16",
+      "query": "What test framework does this project use?",
+      "category": "testing",
+      "expected_sources": ["docs/testing-strategy.md"],
+      "is_paraphrase": false,
+      "lexical_overlap": "high",
+      "notes": "Direct — 'test framework', 'pytest' appear in testing-strategy.md"
+    },
+    {
+      "id": "q-17",
+      "query": "Which test file covers the ingestion pipeline?",
+      "category": "testing",
+      "expected_sources": ["docs/testing-strategy.md"],
+      "is_paraphrase": false,
+      "lexical_overlap": "high",
+      "notes": "Direct — 'ingestion', 'test' appear"
+    },
+    {
+      "id": "q-18",
+      "query": "What is the default path for the SQLite database file?",
+      "category": "configuration",
+      "expected_sources": ["docs/configuration.md"],
+      "is_paraphrase": false,
+      "lexical_overlap": "high",
+      "notes": "Direct — 'SQLite database', 'path' appear in configuration.md"
+    },
+    {
+      "id": "q-19",
+      "query": "How do I swap in a different embedding model?",
+      "category": "configuration",
+      "expected_sources": ["docs/configuration.md"],
+      "is_paraphrase": true,
+      "lexical_overlap": "medium",
+      "notes": "Semi-paraphrase — 'embedding model' appears but 'swap in' does not"
+    },
+    {
+      "id": "q-20",
+      "query": "What semantic and lexical weights are used in hybrid scoring?",
+      "category": "configuration",
+      "expected_sources": ["docs/configuration.md"],
+      "is_paraphrase": false,
+      "lexical_overlap": "high",
+      "notes": "Direct — 'semantic weight', 'lexical weight' appear verbatim"
+    },
+    {
+      "id": "q-21",
+      "query": "What naming convention is used for Python functions?",
+      "category": "project_conventions",
+      "expected_sources": ["docs/conventions.md"],
+      "is_paraphrase": false,
+      "lexical_overlap": "high",
+      "notes": "Direct — 'naming convention', 'functions' appear in conventions.md"
+    },
+    {
+      "id": "q-22",
+      "query": "Which module owns the memory and RAG subsystem?",
+      "category": "project_conventions",
+      "expected_sources": ["docs/conventions.md"],
+      "is_paraphrase": false,
+      "lexical_overlap": "high",
+      "notes": "Direct — 'memory', 'RAG' appear"
+    },
+    {
+      "id": "q-23",
+      "query": "What frontend library was chosen for the dashboard?",
+      "category": "frontend",
+      "expected_sources": ["decisions/frontend-framework.md"],
+      "is_paraphrase": false,
+      "lexical_overlap": "high",
+      "notes": "Direct — 'frontend', 'dashboard' appear"
+    },
+    {
+      "id": "q-24",
+      "query": "What build tool does the dashboard project use?",
+      "category": "frontend",
+      "expected_sources": ["decisions/frontend-framework.md"],
+      "is_paraphrase": false,
+      "lexical_overlap": "high",
+      "notes": "Direct — 'build tool', 'dashboard' appear"
+    },
+    {
+      "id": "q-25",
+      "query": "What technology manages the UI of the developer environment?",
+      "category": "frontend",
+      "expected_sources": ["decisions/frontend-framework.md"],
+      "is_paraphrase": true,
+      "lexical_overlap": "low",
+      "notes": "Paraphrase — 'UI of the developer environment' vs 'dashboard'; tests semantic generalization"
+    }
+  ]
+}

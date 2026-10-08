@@ -24,6 +24,7 @@ from .ingestion.pipeline import IngestionPipeline, IngestionResult
 from .retrieval.search import RetrievalService
 from .retrieval.ranking import rank_and_deduplicate_results
 from .retrieval.assembler import ContextAssembler, estimate_tokens
+from .intelligence import LayaIntelligenceContext, LayaIntelligenceService
 
 __all__ = [
     "MemoryRecord",
@@ -45,4 +46,6 @@ __all__ = [
     "rank_and_deduplicate_results",
     "ContextAssembler",
     "estimate_tokens",
+    "LayaIntelligenceContext",
+    "LayaIntelligenceService",
 ]

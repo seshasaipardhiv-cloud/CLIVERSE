@@ -1,14 +1,14 @@
 # Member 2 Integration Guide: Memory & Retrieval Interfaces
 
 **Subsystem:** CLIVERSE — Member 2 (Memory / RAG + Rules Intelligence)  
-**Status:** Stage 1, 2 & 3 Complete (Models, Ingestion, Deduplication, Embeddings, Retrieval, Context Assembly)  
+**Status:** Stages 1, 2, 3, 3.5, 4 & 5 Complete (Models, Ingestion, Deduplication, Embeddings, Retrieval, Rules Engine, Unified Laya Intelligence Contract)  
 **Target Consumers:** Member 1 (Core + Laya Engine), Member 3 (Dashboard UI)  
 
 ---
 
 ## 1. Overview & Current Status
 
-This guide specifies how external subsystems interact with Member 2's persistent memory, ingestion, semantic search, and context assembly services.
+This guide specifies how external subsystems interact with Member 2's persistent memory, ingestion, semantic search, rules evaluation, and unified intelligence context services.
 
 | Component | Status | Description |
 |---|---|---|
@@ -22,8 +22,9 @@ This guide specifies how external subsystems interact with Member 2's persistent
 | **Retrieval Engine & Hybrid Search** | ✅ **Implemented (Stage 3)** | Semantic vector search + lexical overlap scoring with min_score and top_k |
 | **Ranking & Deduplication** | ✅ **Implemented (Stage 3)** | Line overlap detection, exact text duplicate stripping, score-descending order |
 | **Context Assembly** | ✅ **Implemented (Stage 3)** | `ContextAssembler` generating source-backed markdown blocks bounded by token budget |
-| **Rules Engine & Resolver** | ⏳ *Planned (Stage 4)* | Rule parser, priority weighting, and conflict resolution trace |
-| **REST API Router** | ⏳ *Planned (Stage 5)* | FastAPI endpoints for Member 3 Dashboard |
+| **Rules Engine & Resolver** | ✅ **Implemented (Stage 4)** | Rule parser, priority weighting, mandatory guardrails, conflict resolution trace |
+| **Unified Intelligence Contract** | ✅ **Implemented (Stage 5)** | `build_intelligence_context()` coordinating Memory + Rules for Member 1 (Laya) |
+| **REST API Router** | ⏳ *Planned (Post-Hackathon)* | FastAPI endpoints for Member 3 Dashboard |
 
 ---
 
@@ -52,7 +53,7 @@ result: IngestionResult = pipeline.ingest(
 
 ## 3. Retrieval & Context Assembly Interfaces (Stage 3)
 
-The primary entry point consumed by Member 1 (Laya) is `RetrievalService`.
+The primary entry point consumed by Member 1 (Laya) for memory-only queries is `RetrievalService`.
 
 ```python
 from memory.retrieval import RetrievalService
@@ -95,13 +96,6 @@ context: ContextPacket = memory_service.retrieve_context(
 )
 
 print(context.assembled_prompt_text)
-# Output ready to inject into Laya prompt:
-# ### Retrieved Project Context
-# [MEMORY 1]
-# Source: decisions/002-auth.md:1-5
-# Type: decision
-# Relevance: 0.88
-# ...
 ```
 
 ---
@@ -121,3 +115,69 @@ $$\text{Final Score} = 0.7 \times \text{Cosine Similarity} + 0.3 \times \text{Ke
 * Token estimation: $\max(1, \lceil \text{length} / 4 \rceil)$.
 * Stops appending items when cumulative tokens reach `context_budget_tokens`.
 * `ContextPacket.provenance_summary` includes item counts, source file lists, source types, score ranges, and session IDs.
+
+---
+
+## 5. Rules Intelligence Engine Interfaces (Stage 4)
+
+The primary service for rules management is [`RulesEngine`](file:///A:/CLIVERSE/rules/engine.py).
+
+```python
+from rules import RulesEngine, Rule, RuleScope, RuleEffect, RuleResolution
+
+engine = RulesEngine()
+```
+
+### 5.1 Querying Applicable Rules (`get_applicable_rules`)
+
+```python
+rules = engine.get_applicable_rules(
+    task="Deploy production database migration",
+    project_id="my-project",
+    cli_name="claude-cli",
+)
+```
+
+### 5.2 Deterministic Conflict Resolution (`resolve_rules`)
+
+Returns winning rules, suppressed rules, detected conflicts, human-readable trace, and structured prompt text:
+
+```python
+resolution: RuleResolution = engine.resolve_rules(
+    task="Deploy production database migration",
+    project_id="my-project",
+    cli_name="claude-cli",
+)
+```
+
+---
+
+## 6. Stage 5 Unified Intelligence Contract (`build_intelligence_context`)
+
+The primary facade coordinating both Memory and Rules into one unified Laya-ready package is [`LayaIntelligenceService`](file:///A:/CLIVERSE/memory/intelligence.py) (aliased as `RAGRulesService`).
+
+```python
+from rag_rules_service import LayaIntelligenceService, LayaIntelligenceContext
+
+service = LayaIntelligenceService()
+
+intelligence: LayaIntelligenceContext = service.build_intelligence_context(
+    task="Add JWT authentication and update database schema",
+    project_id="my-project",
+    cli_name="claude-cli",
+    top_k=5,
+    min_score=0.35,
+    context_budget_tokens=2000,
+)
+
+# Overall decision: ALLOW | WARN | ASK | DENY
+print("Decision:", intelligence.decision)
+
+# Unified formatted prompt text
+print(intelligence.combined_laya_context)
+
+# Programmatic access to components
+print("Memory items:", len(intelligence.memory_context.items))
+print("Winning rules:", len(intelligence.rule_resolution.winning_rules))
+print("Sources cited:", intelligence.context_sources)
+```

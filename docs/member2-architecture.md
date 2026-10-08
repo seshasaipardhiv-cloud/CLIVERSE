@@ -1,7 +1,7 @@
 # Member 2 Architecture Specification: RAG & Rules Intelligence
 
 **Subsystem:** CLIVERSE — Member 2 (Memory / RAG + Rules Intelligence)  
-**Status:** Stage 1, Stage 2 & Stage 3 Complete (Models, Storage, Ingestion, Embeddings, Hybrid Retrieval, Context Assembly)  
+**Status:** Stages 1, 2, 3, 3.5, 4 & 5 Complete (Models, Ingestion, Deduplication, Embeddings, Hybrid Retrieval, Rules Engine, Unified Laya Intelligence Contract)  
 **Authors:** Member 2 Engineering Lead  
 
 ---
@@ -72,25 +72,19 @@ CLIVERSE/
 │   ├── retrieval/           # Vector & text search engine
 │   │   ├── __init__.py
 │   │   ├── search.py        # Cosine similarity + BM25 hybrid ranker
+│   │   ├── ranking.py       # Deterministic deduplication and threshold filtering
 │   │   └── assembler.py     # ContextPacket assembler with provenance tags
 │   └── manager.py           # Unified MemoryManager facade
 │
 ├── rules/
-│   ├── __init__.py
+│   ├── __init__.py          # Public exports
 │   ├── models.py            # Pydantic schemas (Rule, RuleScope, RuleEffect, RuleResolution)
-│   ├── parser/              # Rule ingestion (Markdown frontmatter, JSON, YAML)
-│   │   ├── __init__.py
-│   │   └── file_parser.py
-│   ├── validator/           # Syntax and structural validation
-│   │   ├── __init__.py
-│   │   └── rule_validator.py
-│   ├── priority/            # Hierarchy scoring & specificity calculations
-│   │   ├── __init__.py
-│   │   └── priority_matrix.py
-│   ├── resolver/            # Deterministic conflict resolution & explanation traces
-│   │   ├── __init__.py
-│   │   └── conflict_resolver.py
-│   └── engine.py            # RulesEngine evaluation entry point
+│   ├── parser.py            # RuleParser (YAML/JSON loading, normalization, duplicate detection)
+│   ├── validator.py         # RuleValidator (syntax, regex, condition validation)
+│   ├── applicability.py     # RuleApplicabilityChecker (scope, project, CLI, condition matching)
+│   ├── storage.py           # RuleStore (version-controlled storage in .cliverse/rules & .envcore/rules)
+│   ├── resolver.py          # RuleResolver (conflict detection, mandatory guardrails, explanation trace)
+│   └── engine.py            # RulesEngine (high-level facade integrating storage, applicability, resolver)
 │
 ├── rag_rules_service.py     # Public facade consumed directly by Member 1 (Laya)
 ├── memory_rules_api.py      # FastAPI APIRouter consumed by Member 3 (Dashboard)
@@ -286,6 +280,22 @@ Member 1 consumes Member 2 exclusively through this interface:
 
 ```python
 class RAGRulesService:
+    def build_intelligence_context(
+        self,
+        task: str,
+        project_id: Optional[str] = None,
+        cli_name: Optional[str] = None,
+        task_rules: Optional[List[Rule]] = None,
+        top_k: int = 5,
+        min_score: float = 0.35,
+        context_budget_tokens: int = 2000,
+    ) -> LayaIntelligenceContext:
+        """
+        Primary Stage 5 Unified Integration API. Orchestrates memory retrieval,
+        rule applicability, deterministic conflict resolution, and prompt formatting.
+        """
+        ...
+
     def retrieve_context(
         self,
         task: str,

@@ -37,31 +37,72 @@ class RuleScope(str, Enum):
         }
         return weights[self]
 
+    @property
+    def specificity(self) -> int:
+        """Ordinal specificity score: GLOBAL=1, PROJECT=2, CLI=3, TASK=4."""
+        ranks = {
+            RuleScope.GLOBAL: 1,
+            RuleScope.PROJECT: 2,
+            RuleScope.CLI: 3,
+            RuleScope.TASK: 4,
+        }
+        return ranks[self]
+
 
 class RuleEffect(str, Enum):
-    """Action or restriction enforced by a rule."""
-    ENFORCE = "ENFORCE"  # Mandatory positive instruction (e.g. "Use TypeScript")
-    DENY = "DENY"        # Hard prohibition (e.g. "Never alter production .env")
-    WARN = "WARN"        # Caution advisory
-    ALLOW = "ALLOW"      # Explicit permission
+    """
+    Action or restriction enforced by a rule.
+
+    Canonical Semantics:
+      - ALLOW: Explicitly permits a matching action/condition.
+      - DENY: Hard prohibition; matching action/condition is forbidden.
+      - WARN: Allows continuation but produces an advisory warning.
+      - ENFORCE: Mandatory positive requirement (e.g. 'Use TypeScript').
+      - REQUIRE: Synonym/equivalent to ENFORCE (prerequisite required).
+      - ASK: Requires interactive human confirmation before continuation.
+    """
+    ALLOW = "ALLOW"
+    DENY = "DENY"
+    WARN = "WARN"
+    ENFORCE = "ENFORCE"
+    REQUIRE = "REQUIRE"
+    ASK = "ASK"
+
+    @property
+    def severity_rank(self) -> int:
+        """
+        Safety ordering for conflict tie-breaking (more restrictive wins):
+        DENY (6) > ASK (5) > REQUIRE (4) / ENFORCE (4) > WARN (2) > ALLOW (1)
+        """
+        ranks = {
+            RuleEffect.DENY: 6,
+            RuleEffect.ASK: 5,
+            RuleEffect.REQUIRE: 4,
+            RuleEffect.ENFORCE: 4,
+            RuleEffect.WARN: 2,
+            RuleEffect.ALLOW: 1,
+        }
+        return ranks.get(self, 0)
 
 
 class RuleCondition(BaseModel):
     """
-    Optional granular pattern or criteria matching for rule activation.
+    Granular criteria matching for conditional rule activation.
     """
-    field_name: str = "task"  # "task" | "file" | "command" | "cli"
-    operator: str = "contains"  # "contains" | "regex" | "equals" | "starts_with"
+    field_name: str = "task"  # "task" | "file" | "path" | "command" | "cli"
+    operator: str = "contains"  # "contains" | "regex" | "equals" | "starts_with" | "glob" | "in"
     value: str
 
 
 class Rule(BaseModel):
     """
     Individual engineering constraint or preference rule.
+    Fully serializable, deterministic, and persistent.
     """
     rule_id: str = Field(default_factory=lambda: f"rule-{uuid4().hex[:8]}")
     name: str
     scope: RuleScope = RuleScope.PROJECT
+    scope_id: Optional[str] = None  # e.g. project_id, cli_name, task_id, or 'global'
     description: str
     target: str = "general"  # Domain/target e.g., "language", "database", "security", "git"
     effect: RuleEffect = RuleEffect.ENFORCE
@@ -70,8 +111,10 @@ class Rule(BaseModel):
     cli_filter: Optional[str] = None  # Applies only to this CLI if set (e.g. 'claude-cli')
     project_id: Optional[str] = None  # Isolates rule to a specific project
     enabled: bool = True
+    version: int = 1
     conditions: List[RuleCondition] = Field(default_factory=list)
     created_at: str = Field(default_factory=current_iso_timestamp)
+    updated_at: Optional[str] = None
     metadata: Dict[str, Any] = Field(default_factory=dict)
 
     @property
@@ -98,7 +141,7 @@ class RuleConflict(BaseModel):
     """
     winning_rule_id: str
     suppressed_rule_id: str
-    target: str
+    target: str = "general"
     reason: str
 
 
@@ -110,5 +153,8 @@ class RuleResolution(BaseModel):
     task: str
     applicable_rules: List[Rule] = Field(default_factory=list)
     conflicts: List[RuleConflict] = Field(default_factory=list)
+    winning_rules: List[Rule] = Field(default_factory=list)
+    suppressed_rules: List[Rule] = Field(default_factory=list)
     explanation_trace: str = ""
     constraints_prompt_text: str = ""
+    metadata: Dict[str, Any] = Field(default_factory=dict)

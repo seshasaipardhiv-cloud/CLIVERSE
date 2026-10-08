@@ -167,7 +167,13 @@ class TextChunker:
         start_line_1idx: int,
         end_line_1idx: int,
     ) -> List[tuple[int, int, str]]:
-        """Subdivides an oversized block of lines respecting line numbers."""
+        """Subdivides an oversized block of lines respecting line numbers.
+
+        Handles two cases:
+        1. Multi-line sections: splits at line boundaries (original behaviour).
+        2. Single oversized line: falls back to word-boundary splitting via
+           _split_long_line(). Covers minified code and long unbroken prose.
+        """
         sub_chunks: List[tuple[int, int, str]] = []
         cur_lines: List[str] = []
         cur_start = start_line_1idx
@@ -177,6 +183,17 @@ class TextChunker:
 
         for offset, line in enumerate(section_lines):
             line_len = len(line) + 1
+            abs_line_num = start_line_1idx + offset
+
+            # Fallback: a single line exceeding chunk_size while the accumulator
+            # is empty cannot be split line-by-line; split at word boundaries.
+            if line_len > self.chunk_size + 1 and not cur_lines:
+                word_chunks = self._split_long_line(line, abs_line_num)
+                sub_chunks.extend(word_chunks)
+                cur_start = abs_line_num + 1
+                cur_len = 0
+                continue
+
             if cur_len + line_len > self.chunk_size and cur_lines:
                 chunk_text = "\n".join(cur_lines).strip()
                 if chunk_text:
@@ -204,3 +221,39 @@ class TextChunker:
                 sub_chunks.append((cur_start, end_line_1idx, chunk_text))
 
         return sub_chunks
+
+    def _split_long_line(self, line: str, line_num: int) -> List[tuple[int, int, str]]:
+        """Splits a single oversized line at word boundaries.
+
+        All sub-chunks share the same line_num (they come from one source line).
+        Last-resort fallback for minified code and long unbroken prose.
+        """
+        words = line.split()
+        if not words:
+            return []
+
+        result: List[tuple[int, int, str]] = []
+        current_words: List[str] = []
+        current_len = 0
+
+        for word in words:
+            word_len = len(word) + 1
+            if current_len + word_len > self.chunk_size and current_words:
+                result.append((line_num, line_num, " ".join(current_words)))
+                overlap_words: List[str] = []
+                overlap_len = 0
+                for w in reversed(current_words):
+                    if overlap_len + len(w) + 1 <= self.chunk_overlap:
+                        overlap_words.insert(0, w)
+                        overlap_len += len(w) + 1
+                    else:
+                        break
+                current_words = list(overlap_words)
+                current_len = sum(len(w) + 1 for w in current_words)
+            current_words.append(word)
+            current_len += word_len
+
+        if current_words:
+            result.append((line_num, line_num, " ".join(current_words)))
+
+        return result
