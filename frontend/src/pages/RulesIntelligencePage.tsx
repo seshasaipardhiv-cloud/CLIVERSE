@@ -123,17 +123,17 @@ export const RulesIntelligencePage: React.FC = () => {
     }
   };
 
-  const handleSimulate = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!simTask.trim()) return;
+  const handleSimulate = async (e?: React.FormEvent) => {
+    if (e && e.preventDefault) e.preventDefault();
+    if (!simTask.trim() || isSimulating) return;
 
     setIsSimulating(true);
     setSimResult(null);
     try {
       const res = await rulesApi.resolve({
         task: simTask.trim(),
-        project_id: currentProject,
-        cli_name: currentCli,
+        project_id: currentProject || undefined,
+        cli_name: currentCli || undefined,
       });
       setSimResult(res);
       showToast({
@@ -258,39 +258,48 @@ export const RulesIntelligencePage: React.FC = () => {
             <button
               type="submit"
               disabled={isSimulating || !simTask.trim()}
-              className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-bold text-xs rounded-xl flex items-center justify-center gap-2 shadow-[0_0_15px_rgba(16,185,129,0.3)] disabled:opacity-50"
+              className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-bold text-xs rounded-xl flex items-center justify-center gap-2 shadow-[0_0_15px_rgba(16,185,129,0.3)] disabled:opacity-50 cursor-pointer disabled:cursor-not-allowed transition-all"
             >
+              <Sparkles className="w-3.5 h-3.5" />
               <span>{isSimulating ? "Simulating..." : "Simulate Resolution"}</span>
             </button>
           </div>
         </form>
 
-        {simResult && (
-          <div className="mt-4 pt-4 border-t border-[#1a253c] space-y-3 animate-in fade-in duration-200">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-slate-400 font-mono">WINNING DECISION:</span>
-                <StatusBadge status={simResult.winning_decision} size="md" />
-              </div>
-              <span className="text-xs font-mono text-slate-500">
-                {simResult.applicable_rules.length} matched / {simResult.winning_rules.length} won
-              </span>
-            </div>
+        {simResult && (() => {
+          const explanationSteps = Array.isArray(simResult.explanation_trace)
+            ? simResult.explanation_trace
+            : typeof simResult.explanation_trace === "string"
+            ? simResult.explanation_trace.split("\n").filter((l) => l.trim().length > 0)
+            : [];
 
-            {simResult.explanation_trace.length > 0 && (
-              <div className="p-3 bg-[#080d19] border border-[#18233a] rounded-lg">
-                <span className="text-[10px] font-mono uppercase text-slate-500 block mb-1">
-                  EXPLANATION TRACE
+          return (
+            <div className="mt-4 pt-4 border-t border-[#1a253c] space-y-3 animate-in fade-in duration-200">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-slate-400 font-mono">WINNING DECISION:</span>
+                  <StatusBadge status={simResult.winning_decision} size="md" />
+                </div>
+                <span className="text-xs font-mono text-slate-500">
+                  {simResult.applicable_rules.length} matched / {simResult.winning_rules.length} won
                 </span>
-                <ul className="text-xs font-mono text-slate-300 space-y-1 list-disc list-inside">
-                  {simResult.explanation_trace.map((step, idx) => (
-                    <li key={idx}>{step}</li>
-                  ))}
-                </ul>
               </div>
-            )}
-          </div>
-        )}
+
+              {explanationSteps.length > 0 && (
+                <div className="p-3 bg-[#080d19] border border-[#18233a] rounded-lg">
+                  <span className="text-[10px] font-mono uppercase text-slate-500 block mb-1">
+                    EXPLANATION TRACE
+                  </span>
+                  <ul className="text-xs font-mono text-slate-300 space-y-1 list-disc list-inside">
+                    {explanationSteps.map((step, idx) => (
+                      <li key={idx}>{step}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          );
+        })()}
       </Card>
 
       {/* ── Active Rules Management ─────────────────────────────────────── */}

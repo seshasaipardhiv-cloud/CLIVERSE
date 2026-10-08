@@ -113,13 +113,16 @@ export interface RuleResolutionResponse {
   applicable_rules: RuleItem[];
   winning_rules: RuleItem[];
   conflicts: Array<{
-    rule_a_id: string;
-    rule_b_id: string;
-    nature: string;
-    winning_rule_id: string;
-    reason: string;
+    winning_rule_id?: string;
+    suppressed_rule_id?: string;
+    rule_a_id?: string;
+    rule_b_id?: string;
+    nature?: string;
+    target?: string;
+    reason?: string;
   }>;
-  explanation_trace: string[];
+  explanation_trace: string[] | string;
+  explanation_text?: string;
 }
 
 export interface ContextItemResponse {

@@ -731,6 +731,13 @@ def resolve_rules(req: ResolveRulesRequest):
     else:
         decision = RuleDecision.ALLOW
 
+    if isinstance(res.explanation_trace, str):
+        explanation_lines = [
+            line.strip() for line in res.explanation_trace.splitlines() if line.strip()
+        ]
+    else:
+        explanation_lines = list(res.explanation_trace)
+
     return {
         "task": req.task,
         "project_id": pid,
@@ -739,7 +746,8 @@ def resolve_rules(req: ResolveRulesRequest):
         "applicable_rules": [r.model_dump() for r in res.applicable_rules],
         "winning_rules": [r.model_dump() for r in res.winning_rules],
         "conflicts": [c.model_dump() for c in res.conflicts],
-        "explanation_trace": res.explanation_trace,
+        "explanation_trace": explanation_lines,
+        "explanation_text": res.explanation_trace if isinstance(res.explanation_trace, str) else "\n".join(res.explanation_trace),
     }
 
 
