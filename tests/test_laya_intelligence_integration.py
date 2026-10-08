@@ -457,7 +457,7 @@ class TestLayaIntelligenceIntegration(unittest.TestCase):
         json_str = intel.model_dump_json()
         self.assertIsInstance(json_str, str)
         reparsed = json.loads(json_str)
-        self.assertEqual(reparsed["decision"], "ALLOW")
+        self.assertEqual(reparsed["decision"], "REQUIRE")  # r-dash effect=ENFORCE → RuleDecision.REQUIRE
         self.assertEqual(reparsed["task"], "Inspect dashboard state")
 
     # ── SCENARIO 10: SUB-SYSTEM ERROR RESILIENCE ──────────────────────────────
@@ -476,7 +476,7 @@ class TestLayaIntelligenceIntegration(unittest.TestCase):
         # Must NOT crash the caller; returns safe fallback with error metadata
         intel = service.build_intelligence_context(task="Test error resilience")
         self.assertIsInstance(intel, LayaIntelligenceContext)
-        self.assertEqual(intel.metadata.get("memory_status"), "error")
+        self.assertEqual(intel.metadata.get("memory_status"), "ERROR")
         self.assertIn("Storage failure", intel.metadata.get("memory_error", ""))
         self.assertEqual(len(intel.memory_context.items), 0)
 

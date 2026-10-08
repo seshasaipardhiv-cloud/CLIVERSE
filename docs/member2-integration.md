@@ -1,7 +1,7 @@
 # Member 2 Integration Guide: Memory & Retrieval Interfaces
 
 **Subsystem:** CLIVERSE — Member 2 (Memory / RAG + Rules Intelligence)  
-**Status:** Stages 1, 2, 3, 3.5, 4 & 5 Complete (Models, Ingestion, Deduplication, Embeddings, Retrieval, Rules Engine, Unified Laya Intelligence Contract)  
+**Status:** Stages 1, 2, 3, 3.5, 4, 5 & 5.1 Complete (Models, Ingestion, Deduplication, Embeddings, Retrieval, Rules Engine, Unified Laya Intelligence Contract, Safety Hardening)  
 **Target Consumers:** Member 1 (Core + Laya Engine), Member 3 (Dashboard UI)  
 
 ---
@@ -24,6 +24,7 @@ This guide specifies how external subsystems interact with Member 2's persistent
 | **Context Assembly** | ✅ **Implemented (Stage 3)** | `ContextAssembler` generating source-backed markdown blocks bounded by token budget |
 | **Rules Engine & Resolver** | ✅ **Implemented (Stage 4)** | Rule parser, priority weighting, mandatory guardrails, conflict resolution trace |
 | **Unified Intelligence Contract** | ✅ **Implemented (Stage 5)** | `build_intelligence_context()` coordinating Memory + Rules for Member 1 (Laya) |
+| **Safety + Contract Hardening** | ✅ **Implemented (Stage 5.1)** | `SubsystemStatus`, `RuleDecision`, `TaskLike` protocol; strict ERROR vs OK_EMPTY semantics |
 | **REST API Router** | ⏳ *Planned (Post-Hackathon)* | FastAPI endpoints for Member 3 Dashboard |
 
 ---
@@ -152,12 +153,18 @@ resolution: RuleResolution = engine.resolve_rules(
 
 ---
 
-## 6. Stage 5 Unified Intelligence Contract (`build_intelligence_context`)
+## 6. Stage 5 / 5.1 Unified Intelligence Contract (`build_intelligence_context`)
 
-The primary facade coordinating both Memory and Rules into one unified Laya-ready package is [`LayaIntelligenceService`](file:///A:/CLIVERSE/memory/intelligence.py) (aliased as `RAGRulesService`).
+The primary facade coordinating both Memory and Rules into one unified Laya-ready package is [`LayaIntelligenceService`](file:///A:/CLIVERSE/memory/intelligence.py). Import exclusively from the canonical public entry point:
 
 ```python
-from rag_rules_service import LayaIntelligenceService, LayaIntelligenceContext
+from rag_rules_service import (
+    LayaIntelligenceService,
+    LayaIntelligenceContext,
+    SubsystemStatus,   # OK_WITH_RESULTS | OK_EMPTY | ERROR
+    RuleDecision,      # ALLOW | WARN | REQUIRE | ASK | DENY | UNKNOWN
+    TaskLike,          # Protocol for StructuredTask-compatible objects
+)
 
 service = LayaIntelligenceService()
 
@@ -169,14 +176,61 @@ intelligence: LayaIntelligenceContext = service.build_intelligence_context(
     min_score=0.35,
     context_budget_tokens=2000,
 )
+```
 
-# Overall decision: ALLOW | WARN | ASK | DENY
-print("Decision:", intelligence.decision)
+`task` may be a `str`, Member 1's `StructuredTask`, or any object satisfying the `TaskLike` protocol (has `.task: str` and `.as_dict() -> dict`).
+
+### 6.1 Subsystem Status Semantics (Stage 5.1)
+
+> **Rule:** `OK_EMPTY` and `ERROR` are **never interchangeable.**
+
+| `memory_status` / `rules_status` | Meaning | Prompt text |
+|---|---|---|
+| `OK_WITH_RESULTS` | Subsystem ran; found data | Items/rules shown |
+| `OK_EMPTY` | Subsystem ran; found nothing (valid) | "No relevant project memory found" / "No applicable engineering rules" |
+| `ERROR` | Subsystem raised an exception | "Memory subsystem error: …" / "Rules subsystem error: …" |
+
+Always check status before acting on the result:
+
+```python
+if intelligence.memory_status == SubsystemStatus.ERROR:
+    # Do NOT treat this as "no relevant memory"
+    handle_memory_error(intelligence.metadata["memory_error"])
+
+if intelligence.rules_status == SubsystemStatus.ERROR:
+    # rule_decision is UNKNOWN — do NOT default to ALLOW
+    handle_rules_error(intelligence.metadata["rules_error"])
+```
+
+### 6.2 RuleDecision Semantics (Stage 5.1)
+
+> **`rule_decision` represents developer/project rule resolution only.**  
+> **It is NOT the final security or execution authorization (owned by Member 4).**
+
+| `rule_decision` | Meaning |
+|---|---|
+| `ALLOW` | No applicable rules, or all rules permit |
+| `WARN` | Advisory warning; action may continue |
+| `REQUIRE` | Positive prerequisite constraint (e.g. "Tests must pass") |
+| `ASK` | Human confirmation required before continuing |
+| `DENY` | Hard prohibition; action is blocked by guardrail |
+| `UNKNOWN` | Rules engine failed; resolution unavailable — do NOT treat as ALLOW |
+
+### 6.3 Quick Usage
+
+```python
+# Overall rule decision
+print("Decision:", intelligence.decision)         # str alias of rule_decision
+print("Rule decision:", intelligence.rule_decision)  # RuleDecision enum
+
+# Subsystem health
+print("Memory:", intelligence.memory_status)
+print("Rules:", intelligence.rules_status)
 
 # Unified formatted prompt text
 print(intelligence.combined_laya_context)
 
-# Programmatic access to components
+# Granular access
 print("Memory items:", len(intelligence.memory_context.items))
 print("Winning rules:", len(intelligence.rule_resolution.winning_rules))
 print("Sources cited:", intelligence.context_sources)

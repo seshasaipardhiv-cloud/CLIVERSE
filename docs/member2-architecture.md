@@ -1,7 +1,7 @@
 # Member 2 Architecture Specification: RAG & Rules Intelligence
 
 **Subsystem:** CLIVERSE — Member 2 (Memory / RAG + Rules Intelligence)  
-**Status:** Stages 1, 2, 3, 3.5, 4 & 5 Complete (Models, Ingestion, Deduplication, Embeddings, Hybrid Retrieval, Rules Engine, Unified Laya Intelligence Contract)  
+**Status:** Stages 1, 2, 3, 3.5, 4, 5 & 5.1 Complete — 142 Tests Green  
 **Authors:** Member 2 Engineering Lead  
 
 ---
@@ -237,10 +237,15 @@ class RuleScope(str, Enum):
     TASK = "TASK"
 
 class RuleEffect(str, Enum):
-    ENFORCE = "ENFORCE"                 # Must do (e.g., "Use TypeScript")
-    DENY = "DENY"                       # Must NOT do (e.g., "Never modify .env")
-    WARN = "WARN"                       # Caution developer
-    ALLOW = "ALLOW"                     # Explicitly permitted
+    ALLOW   = "ALLOW"    # Explicitly permits. No restriction.
+    WARN    = "WARN"     # Advisory only; action may continue.
+    ENFORCE = "ENFORCE"  # Synonym for REQUIRE (backward compat). Maps to RuleDecision.REQUIRE.
+    REQUIRE = "REQUIRE"  # Positive prerequisite constraint ("Tests must pass first").
+    ASK     = "ASK"      # Human confirmation required before continuing.
+    DENY    = "DENY"     # Hard prohibition; action is blocked.
+
+# NOTE: ENFORCE and REQUIRE are equivalent and both map to RuleDecision.REQUIRE.
+# REQUIRE is not a form of DENY — it represents a precondition, not a prohibition.
 
 class Rule(BaseModel):
     rule_id: str                        # Unique slug (e.g., "proj-use-typescript")
@@ -279,20 +284,39 @@ class RuleResolution(BaseModel):
 Member 1 consumes Member 2 exclusively through this interface:
 
 ```python
-class RAGRulesService:
+# Canonical import (from public facade only)
+from rag_rules_service import (
+    LayaIntelligenceService,
+    LayaIntelligenceContext,
+    SubsystemStatus,  # OK_WITH_RESULTS | OK_EMPTY | ERROR
+    RuleDecision,     # ALLOW | WARN | REQUIRE | ASK | DENY | UNKNOWN
+    TaskLike,         # Protocol: .task: str + .as_dict() -> dict
+)
+
+class LayaIntelligenceService:
     def build_intelligence_context(
         self,
-        task: str,
+        task: Union[str, TaskLike, Any],  # str, StructuredTask, or TaskLike-compatible
         project_id: Optional[str] = None,
         cli_name: Optional[str] = None,
         task_rules: Optional[List[Rule]] = None,
         top_k: int = 5,
         min_score: float = 0.35,
         context_budget_tokens: int = 2000,
+        task_metadata: Optional[Dict[str, Any]] = None,
     ) -> LayaIntelligenceContext:
         """
         Primary Stage 5 Unified Integration API. Orchestrates memory retrieval,
         rule applicability, deterministic conflict resolution, and prompt formatting.
+
+        Guarantees (Stage 5.1):
+          - memory_status: OK_WITH_RESULTS | OK_EMPTY | ERROR (never conflated)
+          - rules_status: OK_WITH_RESULTS | OK_EMPTY | ERROR (never conflated)
+          - rule_decision: UNKNOWN on rules engine failure (never silently ALLOW)
+          - memory_status=ERROR prompt text ≠ "No relevant project memory found"
+
+        rule_decision represents developer/project rule resolution only.
+        It is NOT the final security or execution authorization (Member 4 TrustGate).
         """
         ...
 

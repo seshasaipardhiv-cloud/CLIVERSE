@@ -4,16 +4,20 @@ Unified Laya Intelligence Context & Service — Member 2 (RAG + Rules)
 Defines the stable intelligence contract consumed by Member 1 (Laya Engine).
 Orchestrates semantic project memory, applicable engineering rules,
 deterministic conflict resolution, and structured prompt context.
+
+Note:
+  rule_decision represents developer/project rule resolution only.
+  It is NOT the final security or execution authorization (owned by Member 4 TrustGate).
 """
 
-from typing import Any, Dict, List, Optional, Union
+from enum import Enum
+from typing import Any, Dict, List, Optional, Protocol, Union, runtime_checkable
 from pydantic import BaseModel, Field
 
 from memory.models import ContextPacket, MemorySearchResult
 from memory.retrieval.search import RetrievalService
 from memory.storage.base import MemoryStorage
 from memory.ingestion.pipeline import IngestionPipeline, IngestionResult
-from memory.embeddings.base import EmbeddingProvider
 from rules.models import (
     Rule,
     RuleConflict,
@@ -22,6 +26,40 @@ from rules.models import (
     RuleScope,
 )
 from rules.engine import RulesEngine
+
+
+class SubsystemStatus(str, Enum):
+    """Explicit operational status for Member 2 subsystems."""
+    OK_WITH_RESULTS = "OK_WITH_RESULTS"
+    OK_EMPTY = "OK_EMPTY"
+    ERROR = "ERROR"
+
+
+class RuleDecision(str, Enum):
+    """
+    Developer and project rule resolution decision.
+    Represents developer/project rule resolution only.
+    It is NOT the final security or execution authorization.
+    """
+    ALLOW = "ALLOW"
+    WARN = "WARN"
+    REQUIRE = "REQUIRE"
+    ASK = "ASK"
+    DENY = "DENY"
+    UNKNOWN = "UNKNOWN"
+
+
+@runtime_checkable
+class TaskLike(Protocol):
+    """
+    Formal protocol for task objects accepted by Member 2.
+    Accommodates Member 1's StructuredTask as well as custom task types,
+    while preserving full backward compatibility with plain strings.
+    """
+    task: str
+
+    def as_dict(self) -> Dict[str, Any]:
+        ...
 
 
 class LayaIntelligenceContext(BaseModel):
@@ -38,23 +76,45 @@ class LayaIntelligenceContext(BaseModel):
     context_sources: List[str] = Field(default_factory=list)
     rule_explanations: List[str] = Field(default_factory=list)
     combined_laya_context: str = ""
-    decision: str = "ALLOW"  # ALLOW | WARN | ASK | DENY
+
+    # Explicit subsystem operational statuses (Fix 1, Fix 3, Fix 4)
+    memory_status: SubsystemStatus = SubsystemStatus.OK_EMPTY
+    rules_status: SubsystemStatus = SubsystemStatus.OK_EMPTY
+
+    # Explicit rule decision (Fix 2, Fix 6)
+    # rule_decision represents developer/project rule resolution only.
+    # It is not the final security or execution authorization.
+    rule_decision: RuleDecision = RuleDecision.ALLOW
+
+    # Backward-compatible string representation included in serialized output
+    decision: str = "ALLOW"
+
     metadata: Dict[str, Any] = Field(default_factory=dict)
 
 
 def format_combined_laya_context(
     memory_context: ContextPacket,
     rule_resolution: RuleResolution,
+    memory_status: SubsystemStatus = SubsystemStatus.OK_WITH_RESULTS,
+    rules_status: SubsystemStatus = SubsystemStatus.OK_WITH_RESULTS,
+    rule_decision: RuleDecision = RuleDecision.ALLOW,
+    memory_error: Optional[str] = None,
+    rules_error: Optional[str] = None,
 ) -> str:
     """
     Renders a clean, structured Markdown block formatted for Laya prompt planning.
-    Includes retrieved project memory, applicable rules, and conflict decisions.
+    Explicitly distinguishes OK_EMPTY from ERROR for both memory and rules.
     """
     sections: List[str] = []
 
     # ── 1. PROJECT CONTEXT ────────────────────────────────────────────────────
     sections.append("### PROJECT CONTEXT\n")
-    if memory_context.items:
+    if memory_status == SubsystemStatus.ERROR:
+        err_msg = memory_error or "Unknown retrieval error"
+        sections.append(f"*(Memory subsystem error: {err_msg})*\n")
+    elif memory_status == SubsystemStatus.OK_EMPTY or not memory_context.items:
+        sections.append("*(No relevant project memory found)*\n")
+    else:
         for idx, item in enumerate(memory_context.items, start=1):
             sections.append(
                 f"[MEMORY {idx}]\n"
@@ -63,13 +123,16 @@ def format_combined_laya_context(
                 f"Relevance: {item.relevance_score:.2f}\n\n"
                 f"{item.snippet.strip()}\n"
             )
-    else:
-        sections.append("*(No relevant project memory found)*\n")
 
     # ── 2. APPLICABLE RULES ───────────────────────────────────────────────────
     sections.append("### APPLICABLE RULES\n")
-    winning = rule_resolution.winning_rules
-    if winning:
+    if rules_status == SubsystemStatus.ERROR:
+        err_msg = rules_error or "Unknown rules evaluation error"
+        sections.append(f"*(Rules subsystem error: {err_msg})*\n")
+    elif rules_status == SubsystemStatus.OK_EMPTY or not rule_resolution.winning_rules:
+        sections.append("*(No applicable engineering rules)*\n")
+    else:
+        winning = rule_resolution.winning_rules
         mand = [r for r in winning if r.is_mandatory]
         glob = [r for r in winning if not r.is_mandatory and r.scope == RuleScope.GLOBAL]
         proj = [r for r in winning if not r.is_mandatory and r.scope == RuleScope.PROJECT]
@@ -101,27 +164,30 @@ def format_combined_laya_context(
             for r in tsk:
                 sections.append(f"* {r.description}")
             sections.append("")
-    else:
-        sections.append("*(No applicable engineering rules)*\n")
 
     # ── 3. RULE RESOLUTION ────────────────────────────────────────────────────
     sections.append("### RULE RESOLUTION\n")
-    has_deny = any(r.effect == RuleEffect.DENY for r in winning)
-    has_ask = any(r.effect == RuleEffect.ASK for r in winning)
-    has_warn = any(r.effect == RuleEffect.WARN for r in winning)
+    winning = rule_resolution.winning_rules
     has_conflicts = bool(rule_resolution.conflicts)
 
-    if has_deny:
+    if rules_status == SubsystemStatus.ERROR:
+        sections.append("Decision: UNKNOWN (Rules engine evaluation failed)")
+    elif rule_decision == RuleDecision.DENY:
         sections.append("Decision: DENY")
         for r in winning:
             if r.effect == RuleEffect.DENY:
                 sections.append(f"Prohibition: {r.description}")
-    elif has_ask:
+    elif rule_decision == RuleDecision.ASK:
         sections.append("Decision: ASK")
         for r in winning:
             if r.effect == RuleEffect.ASK:
                 sections.append(f"Confirmation Required: {r.description}")
-    elif has_warn:
+    elif rule_decision == RuleDecision.REQUIRE:
+        sections.append("Decision: REQUIRE")
+        for r in winning:
+            if r.effect in (RuleEffect.REQUIRE, RuleEffect.ENFORCE):
+                sections.append(f"Prerequisite Constraint: {r.description}")
+    elif rule_decision == RuleDecision.WARN:
         sections.append("Decision: WARN")
         for r in winning:
             if r.effect == RuleEffect.WARN:
@@ -133,7 +199,7 @@ def format_combined_laya_context(
         sections.append("\nResolved Conflicts:")
         for c in rule_resolution.conflicts:
             sections.append(f"* {c.reason}")
-    elif not has_deny:
+    elif rules_status != SubsystemStatus.ERROR and rule_decision != RuleDecision.DENY:
         sections.append("\nNo blocking conflict detected.")
 
     return "\n".join(sections).strip()
@@ -143,6 +209,10 @@ class LayaIntelligenceService:
     """
     Unified Member 2 Facade coordinating memory retrieval and rules intelligence.
     Exposes stable APIs for Member 1 (Laya) and Member 3 (Dashboard).
+
+    Note:
+      rule_decision represents developer/project rule resolution only.
+      It is NOT the final security or execution authorization.
     """
 
     def __init__(
@@ -161,7 +231,7 @@ class LayaIntelligenceService:
 
     def build_intelligence_context(
         self,
-        task: Union[str, Any],
+        task: Union[str, TaskLike, Any],
         project_id: Optional[str] = None,
         cli_name: Optional[str] = None,
         task_rules: Optional[List[Rule]] = None,
@@ -173,13 +243,17 @@ class LayaIntelligenceService:
         """
         Builds complete LayaIntelligenceContext combining project memory,
         applicable rules, deterministic conflict resolution, and formatted prompt text.
+
+        Guarantees:
+          - Memory OK_WITH_RESULTS vs OK_EMPTY vs ERROR states are strictly distinguished.
+          - Rules OK_WITH_RESULTS vs OK_EMPTY vs ERROR states are strictly distinguished.
+          - Rules engine failure produces rules_status=ERROR and rule_decision=UNKNOWN (never silent ALLOW).
+          - Memory failure produces memory_status=ERROR (never described as 'no relevant memory').
         """
         task_str = self._extract_task_text(task)
         meta: Dict[str, Any] = {
             "project_id": project_id,
             "cli_name": cli_name,
-            "memory_status": "ok",
-            "rules_status": "ok",
         }
         if task_metadata:
             meta.update(task_metadata)
@@ -187,6 +261,7 @@ class LayaIntelligenceService:
             meta.update(task.as_dict())
 
         # 1. Retrieve project memory
+        memory_error_msg: Optional[str] = None
         try:
             memory_packet = self.retrieval_service.retrieve_context(
                 task=task_str,
@@ -195,19 +270,27 @@ class LayaIntelligenceService:
                 min_score=min_score,
                 context_budget_tokens=context_budget_tokens,
             )
+            if memory_packet.items:
+                memory_status = SubsystemStatus.OK_WITH_RESULTS
+            else:
+                memory_status = SubsystemStatus.OK_EMPTY
+            meta["memory_status"] = memory_status.value
         except Exception as e:
-            meta["memory_status"] = "error"
-            meta["memory_error"] = str(e)
+            memory_status = SubsystemStatus.ERROR
+            memory_error_msg = str(e)
+            meta["memory_status"] = SubsystemStatus.ERROR.value
+            meta["memory_error"] = memory_error_msg
             memory_packet = ContextPacket(
                 task=task_str,
                 items=[],
                 assembled_prompt_text="",
                 token_estimate=0,
                 provenance_summary=[],
-                retrieval_metadata={"error": str(e)},
+                retrieval_metadata={"error": memory_error_msg},
             )
 
         # 2. Evaluate applicable rules & resolve conflicts
+        rules_error_msg: Optional[str] = None
         try:
             applicable_rules = self.rules_engine.get_applicable_rules(
                 task=task_str,
@@ -223,9 +306,30 @@ class LayaIntelligenceService:
                 task_metadata=meta,
                 task_rules=task_rules,
             )
+            if applicable_rules:
+                rules_status = SubsystemStatus.OK_WITH_RESULTS
+            else:
+                rules_status = SubsystemStatus.OK_EMPTY
+            meta["rules_status"] = rules_status.value
+
+            # Determine rule decision
+            winning = rule_resolution.winning_rules
+            if any(r.effect == RuleEffect.DENY for r in winning):
+                overall_decision = RuleDecision.DENY
+            elif any(r.effect == RuleEffect.ASK for r in winning):
+                overall_decision = RuleDecision.ASK
+            elif any(r.effect in (RuleEffect.REQUIRE, RuleEffect.ENFORCE) for r in winning):
+                overall_decision = RuleDecision.REQUIRE
+            elif any(r.effect == RuleEffect.WARN for r in winning):
+                overall_decision = RuleDecision.WARN
+            else:
+                overall_decision = RuleDecision.ALLOW
+
         except Exception as e:
-            meta["rules_status"] = "error"
-            meta["rules_error"] = str(e)
+            rules_status = SubsystemStatus.ERROR
+            rules_error_msg = str(e)
+            meta["rules_status"] = SubsystemStatus.ERROR.value
+            meta["rules_error"] = rules_error_msg
             applicable_rules = []
             rule_resolution = RuleResolution(
                 task=task_str,
@@ -236,28 +340,26 @@ class LayaIntelligenceService:
                 explanation_trace=f"Rules evaluation failed: {e}",
                 constraints_prompt_text="",
             )
+            # CRITICAL FIX 1 & 3: Failure must NOT become ALLOW. It is UNKNOWN.
+            overall_decision = RuleDecision.UNKNOWN
 
-        # 3. Determine overall decision
-        winning = rule_resolution.winning_rules
-        if any(r.effect == RuleEffect.DENY for r in winning):
-            overall_decision = "DENY"
-        elif any(r.effect == RuleEffect.ASK for r in winning):
-            overall_decision = "ASK"
-        elif any(r.effect == RuleEffect.WARN for r in winning):
-            overall_decision = "WARN"
-        else:
-            overall_decision = "ALLOW"
+        meta["rule_decision"] = overall_decision.value
 
-        # 4. Extract provenance & explanations
+        # 3. Extract provenance & explanations
         context_sources = [item.source for item in memory_packet.items]
         rule_explanations = [c.reason for c in rule_resolution.conflicts]
         if not rule_explanations and rule_resolution.explanation_trace:
             rule_explanations.append(rule_resolution.explanation_trace)
 
-        # 5. Format combined Laya context text
+        # 4. Format combined Laya context text
         combined_text = format_combined_laya_context(
             memory_context=memory_packet,
             rule_resolution=rule_resolution,
+            memory_status=memory_status,
+            rules_status=rules_status,
+            rule_decision=overall_decision,
+            memory_error=memory_error_msg,
+            rules_error=rules_error_msg,
         )
 
         return LayaIntelligenceContext(
@@ -270,7 +372,10 @@ class LayaIntelligenceService:
             context_sources=context_sources,
             rule_explanations=rule_explanations,
             combined_laya_context=combined_text,
-            decision=overall_decision,
+            memory_status=memory_status,
+            rules_status=rules_status,
+            rule_decision=overall_decision,
+            decision=overall_decision.value,
             metadata=meta,
         )
 
@@ -371,7 +476,7 @@ class LayaIntelligenceService:
 
     def get_applicable_rules(
         self,
-        task: Union[str, Any],
+        task: Union[str, TaskLike, Any],
         project_id: Optional[str] = None,
         cli_name: Optional[str] = None,
         task_metadata: Optional[Dict[str, Any]] = None,
@@ -388,7 +493,7 @@ class LayaIntelligenceService:
 
     def resolve_rules(
         self,
-        task: Union[str, Any],
+        task: Union[str, TaskLike, Any],
         project_id: Optional[str] = None,
         cli_name: Optional[str] = None,
         task_metadata: Optional[Dict[str, Any]] = None,
@@ -412,8 +517,8 @@ class LayaIntelligenceService:
         return self.retrieval_service.storage
 
     @staticmethod
-    def _extract_task_text(task: Union[str, Any]) -> str:
-        """Extracts task string from str or StructuredTask object."""
+    def _extract_task_text(task: Union[str, TaskLike, Any]) -> str:
+        """Extracts task string from str, TaskLike protocol, or object with .task attribute."""
         if isinstance(task, str):
             return task
         if hasattr(task, "task"):
