@@ -143,10 +143,11 @@ During the Hack Day, we built and delivered the complete foundational **Security
 
 The security pipeline, audit logger, and governance engine can be executed and tested directly via the CLI tool or REST endpoints.
 
-## Demo Video & Live Simulation
+## Demo Video
 
-- **Interactive Terminal Simulation:** Run `python demo_simulation.py` to see all 6 stages of the Trust Gate executed live in sub-seconds.
-- **Project Walkthrough:** [CLIVERSE GitHub Repository Showcase](https://github.com/seshasaipardhiv-cloud/CLIVERSE)
+**Demo Video:** [Demo Video URL]
+
+A short demonstration of the working project, covering the main user flow, 5-stage Trust Gate evaluation, dangerous operation blocking, regulatory compliance warnings, and tamper-evident audit trail verification. You can also run `python demo_simulation.py` for a live interactive terminal simulation.
 
 ## Open Source and AI Usage
 
@@ -177,10 +178,10 @@ pip install -r requirements.txt
 
 ### Environment Variables
 
-*All environment variables are optional. CLIVERSE runs 100% locally out-of-the-box without requiring third-party API keys.*
-
 ```env
-# Optional configuration
+# Optional: Pre-configure API keys for secrets manager
+OPENAI_API_KEY=your_key_here
+ANTHROPIC_API_KEY=your_key_here
 CLIVERSE_ADMIN_API_KEY=cliverse-admin-default-key
 CLIVERSE_ENV_ROOT=.envcore
 ```
@@ -230,10 +231,22 @@ python cli.py audit
 python cli.py audit-verify
 ```
 
-## Devpost / Hackathon Submission
+## Challenges and Learnings
 
-- **Event:** [Hacktoberfest Hack Day Coimbatore (INIT Club & IDEA Club)](https://mlh.com/events/hacktoberfest-hack-day-coimbatore-x-init-club/challenges)
-- **Repository:** [https://github.com/seshasaipardhiv-cloud/CLIVERSE](https://github.com/seshasaipardhiv-cloud/CLIVERSE)
+### Challenges
+- Designing a fail-closed, multi-tier security gate (Identity -> Permission -> Sandbox -> Compliance -> Audit) that prevents destructive execution without interrupting normal development workflows.
+- Ensuring zero plaintext secret leakage across all logs, telemetry, and CLI outputs.
+- Implementing cryptographic SHA-256 chain integrity verification with sub-millisecond overhead.
+
+### Learnings
+- Translating complex regulatory requirements (GDPR Art. 4/25, EU AI Act Annex III, OWASP Top 10) into deterministic machine-readable policies.
+- Architecture patterns for building CLI-agnostic execution layers with Git-native state recovery.
+
+## Devpost Submission
+
+**Devpost Project:** [Devpost Project URL]
+
+Link to the team's Devpost / Hack Day project submission. Ensure the Devpost project page is complete and contains the required project information, links, media, and team details.
 
 ## Credits and License
 
@@ -254,17 +267,18 @@ Distributed under the **MIT License**.
 - [x] Reason for choosing the problem explained
 - [x] Solution and key features documented
 - [x] Innovation and differentiation explained
-- [x] Architecture included (Mermaid diagram)
+- [x] Architecture included
 - [x] Technical implementation documented
 - [x] Work completed during the hackathon documented
 - [x] Team contributions documented
 - [x] Working application is functional
-- [x] Live application / API instructions added
-- [x] Demo and live simulation script tested
+- [x] Live application link added where applicable
+- [ ] Demo video added
 - [x] AI and open-source components documented
 - [x] Setup and usage instructions tested
-- [x] Technical decisions documented
-- [x] Hackathon event and repository links added
+- [x] Challenges and learnings documented
+- [ ] Devpost submission completed
+- [ ] Devpost link added
 - [x] Credits added
 - [x] License added
 - [x] Repository is organized and complete
