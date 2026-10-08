@@ -1,0 +1,40 @@
+"""
+CLIVERSE Memory & RAG Subsystem — Member 2
+
+Provides persistent knowledge indexing, normalization, chunking, deduplication,
+embeddings, and storage with strict provenance tracking and project isolation.
+"""
+
+from .models import (
+    MemoryRecord,
+    MemoryChunk,
+    MemorySearchResult,
+    ContextItem,
+    ContextPacket,
+)
+from .storage.base import MemoryStorage
+from .storage.sqlite_store import SQLiteMemoryStorage
+from .embeddings.base import EmbeddingProvider
+from .embeddings.local_engine import LocalBaselineEmbeddingProvider
+from .ingestion.normalizer import normalize_text
+from .ingestion.chunker import TextChunker
+from .ingestion.deduplicator import ContentDeduplicator, IngestionStatus
+from .ingestion.pipeline import IngestionPipeline, IngestionResult
+
+__all__ = [
+    "MemoryRecord",
+    "MemoryChunk",
+    "MemorySearchResult",
+    "ContextItem",
+    "ContextPacket",
+    "MemoryStorage",
+    "SQLiteMemoryStorage",
+    "EmbeddingProvider",
+    "LocalBaselineEmbeddingProvider",
+    "normalize_text",
+    "TextChunker",
+    "ContentDeduplicator",
+    "IngestionStatus",
+    "IngestionPipeline",
+    "IngestionResult",
+]
