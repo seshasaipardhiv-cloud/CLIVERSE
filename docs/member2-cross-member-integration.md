@@ -2,7 +2,7 @@
 
 **Subsystem:** CLIVERSE — Member 2 (Memory / RAG & Rules Intelligence)  
 **Target Consumers:** Member 1 (Laya Engine & Core Planning), Member 3 (Dashboard), Member 4 (Security & Trust)  
-**Status:** Frozen & Verified (Milestones: Stage 1 — Foundation, Stage 2 — Ingestion + Embedding Foundation, Stage 3 — Retrieval + Context Assembly, Stage 3.5 — RAG Validation + Hardening, Stage 4 — Rules Intelligence, Stage 5 — Unified Laya Intelligence Contract, Stage 5.1 — Integration Safety Hardening, Stage 6 — Real Cross-Member Integration, Final — Hardening + Handoff — 150 Tests Green)
+**Status:** Verified hackathon MVP subsystem (Milestones: Stage 1 — Foundation, Stage 2 — Ingestion + Embedding Foundation, Stage 3 — Retrieval + Context Assembly, Stage 3.5 — RAG Validation + Hardening, Stage 4 — Rules Intelligence, Stage 5 — Unified Laya Intelligence Contract, Stage 5.1 — Integration Safety Hardening, Stage 6 — Real Cross-Member Integration, Final — Hardening + Handoff — 167 Tests Green; Repo: 235 passed, 0 failed, 2 skipped due to documented environment-specific requirements across 237 collected items)
 
 ---
 
@@ -195,9 +195,8 @@ class RuleDecision(str, Enum):
 $$\text{DENY (6)} \succ \text{ASK (5)} \succ \text{REQUIRE / ENFORCE (4)} \succ \text{WARN (2)} \succ \text{ALLOW (1)}$$
 
 ### Absolute Security Boundary:
-> **`rule_decision` represents developer/project constraint resolution only.**  
-> **It is NOT the final security or execution authorization.**  
-> Member 4's `TrustGate` governs final execution authorization, sandboxing, identity verification, and audit logging. Member 2 never authorizes CLI commands or filesystem access.
+> **Member 2 rule_decision is not execution authorization. Member 4 TrustGate is the final execution authorization authority.**  
+> `rule_decision` represents developer/project constraint resolution only. Member 4 governs final execution authorization, sandboxing, identity verification, and audit logging. Member 2 never authorizes CLI commands or filesystem access.
 
 ---
 
@@ -222,3 +221,19 @@ $$\text{DENY (6)} \succ \text{ASK (5)} \succ \text{REQUIRE / ENFORCE (4)} \succ 
 | `cliverse.contracts.Rule` | `rules.models.Rule` | Adapted | Mapped by `CliverseMemoryProviderAdapter` |
 | `MemoryProvider` Protocol | `CliverseMemoryProviderAdapter` | Native | 100% protocol compliance |
 | Plain string query | `task: str` | Native | Supported directly |
+
+### 8.1 Rule Target & Semantics Preservation Across Adapter
+Required Member 2 rule semantics are preserved across the Member 2 → Member 1 adapter contract (`cliverse.contracts.Rule`).
+
+Because Member 1's `cliverse.contracts.Rule` dataclass is frozen and defines only `rule_id`, `content`, `scope`, `priority`, and `source`, Member 2 encodes the additional required semantics (`target`, `effect`, `mandatory`, `version`) directly into standard public fields without mutating private attributes or using `object.__setattr__`:
+- **`content`:** Prefixed with `[{effect} MANDATORY] {description}` or `[{effect}] {description}`.
+- **`source`:** Formatted as `rules:{target};target={target};effect={effect};mandatory={mandatory};version={version}`.
+- **`priority`:** Elevated to `9999 + effective_priority` for mandatory rules so they dominate planning constraints.
+- **Recovery:** The helper `parse_cliverse_rule_semantics(rule)` losslessly extracts `target`, `rule_id`, `description`, `scope`, `priority`, `effect`, `is_mandatory`, and `version`.
+- **Durability:** This representation survives `copy.deepcopy()`, serialization to dict/JSON, and reconstruction.
+
+### 8.2 Adapter Cache & Invalidation Guarantees
+- Single-slot cache keyed on a deterministic SHA-256 fingerprint over all result-affecting inputs: normalized task, `project_id`, `cli_name`, sorted `task_metadata`, canonical `task_rules`, and `mutation_version`.
+- Order independent: Dictionary key insertion order and rule list order do not alter the cache fingerprint.
+- Lifecycle guarantee: Cache invalidation is guaranteed within the service lifecycle whenever memory or rules are mutated (`store_memory`, `delete_memory`, `create_rule`, `update_rule`, `delete_rule`). Cross-process cache coherence is not claimed.
+

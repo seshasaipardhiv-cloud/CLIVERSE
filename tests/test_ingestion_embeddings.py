@@ -252,6 +252,85 @@ class TestStage2IngestionAndEmbeddings(unittest.TestCase):
         self.assertIsNotNone(chunks[0].embedding)
         self.assertEqual(len(chunks[0].embedding), 64)
 
+    # ── 6. HEURISTIC CHUNKING & TOKEN ESTIMATION EDGE CASES ───────────────────
+
+    def test_heuristic_chunking_edge_cases_and_complex_code(self):
+        """
+        Verifies that heuristic structure-aware chunking handles complex real-world code
+        (multiline decorators, TypeScript interfaces, embedded SQL) deterministically without crashing.
+        """
+        chunker = TextChunker(chunk_size=100, chunk_overlap=15)
+
+        # Complex Python with multiline decorators and embedded SQL
+        complex_code = (
+            "@app.post(\n"
+            "    '/api/v1/users/{user_id}/permissions',\n"
+            "    response_model=UserPermissionResponse,\n"
+            "    dependencies=[Depends(require_admin_auth)]\n"
+            ")\n"
+            "async def update_user_permissions(user_id: str, perms: PermissionUpdateRequest) -> UserPermissionResponse:\n"
+            "    sql = '''\n"
+            "        UPDATE user_permissions\n"
+            "        SET role = :role, updated_at = NOW()\n"
+            "        WHERE user_id = :uid\n"
+            "    '''\n"
+            "    await db.execute(sql, {'role': perms.role, 'uid': user_id})\n"
+            "    return UserPermissionResponse(user_id=user_id, status='SUCCESS')\n"
+        )
+        chunks = chunker.chunk(complex_code, record_id="code-complex", source_type="code")
+        self.assertTrue(len(chunks) >= 1)
+        # Content preserved without corruption
+        reconstructed_snippet = "".join(c.content for c in chunks)
+        self.assertIn("update_user_permissions", reconstructed_snippet)
+        self.assertIn("UPDATE user_permissions", reconstructed_snippet)
+
+        # TypeScript interface with generics
+        ts_code = (
+            "export interface CloudWorkerNode<T extends BaseResource> {\n"
+            "    readonly id: string;\n"
+            "    status: 'ACTIVE' | 'DRAINING' | 'TERMINATED';\n"
+            "    payload: T;\n"
+            "    processEvent: (event: EventEnvelope<T>) => Promise<DispatchResult>;\n"
+            "}\n"
+        )
+        ts_chunks = chunker.chunk(ts_code, record_id="ts-complex", source_type="code")
+        self.assertTrue(len(ts_chunks) >= 1)
+        self.assertIn("CloudWorkerNode", ts_chunks[0].content)
+
+    def test_approximate_token_counting_properties(self):
+        """
+        Verifies token counting is approximate, deterministic, character-based,
+        and monotonic across code, punctuation, Unicode, and long lines.
+        """
+        from memory.retrieval.assembler import estimate_tokens
+
+        # Empty string
+        self.assertEqual(estimate_tokens(""), 0)
+
+        # Short text
+        self.assertEqual(estimate_tokens("word"), 1)
+        self.assertEqual(estimate_tokens("two words!"), 3)
+
+        # Code with dense punctuation and symbols
+        code_str = "def fn(a: int, b: list[str] = []) -> None: pass"
+        est_code = estimate_tokens(code_str)
+        self.assertGreaterEqual(est_code, 10)
+        self.assertLessEqual(est_code, 20)
+
+        # Unicode text
+        unicode_str = "Configuration de la base de données et clés API."
+        est_uni = estimate_tokens(unicode_str)
+        self.assertGreater(est_uni, 0)
+        self.assertEqual(est_uni, estimate_tokens(unicode_str))  # Deterministic
+
+        # Monotonic property: longer text produces >= tokens
+        short_text = "short"
+        medium_text = short_text * 10
+        long_text = short_text * 100
+        self.assertLess(estimate_tokens(short_text), estimate_tokens(medium_text))
+        self.assertLess(estimate_tokens(medium_text), estimate_tokens(long_text))
+
 
 if __name__ == "__main__":
     unittest.main()
+

@@ -79,6 +79,170 @@ except ImportError:
     StructuredTask = Any  # type: ignore[assignment,misc]
 
 
+import hashlib
+import json
+
+
+def _canonicalize_for_cache(val: Any) -> Any:
+    """Recursively converts data structures to canonical JSON-serializable primitives with sorted keys."""
+    if isinstance(val, dict):
+        return {str(k): _canonicalize_for_cache(v) for k, v in sorted(val.items(), key=lambda item: str(item[0]))}
+    elif isinstance(val, (list, tuple)):
+        return [_canonicalize_for_cache(x) for x in val]
+    elif isinstance(val, set):
+        return sorted([_canonicalize_for_cache(x) for x in val], key=lambda x: str(x))
+    elif hasattr(val, "model_dump") and callable(val.model_dump):
+        return _canonicalize_for_cache(val.model_dump())
+    elif hasattr(val, "as_dict") and callable(val.as_dict):
+        return _canonicalize_for_cache(val.as_dict())
+    elif isinstance(val, (int, float, bool, str)) or val is None:
+        return val
+    else:
+        return str(val)
+
+
+def compute_adapter_context_cache_key(
+    task: Any,
+    project_id: Optional[str] = None,
+    cli_name: Optional[str] = None,
+    task_metadata: Optional[Dict[str, Any]] = None,
+    task_rules: Optional[List[Any]] = None,
+    mutation_version: int = 0,
+) -> str:
+    """
+    Computes a deterministic cryptographic SHA-256 fingerprint of all inputs affecting intelligence context.
+
+    Guarantees:
+      1. Normalizes task text (using LayaIntelligenceService._extract_task_text).
+      2. Includes normalized task text, project_id, cli_name, metadata fingerprint,
+         task_rules fingerprint, and mutation_version.
+      3. Independent of object identity and dictionary key insertion order.
+      4. Deterministic list and nested structure handling.
+      5. Pure cryptographic SHA-256 (no process-randomized hash()).
+    """
+    try:
+        norm_task = LayaIntelligenceService._extract_task_text(task)
+    except Exception:
+        norm_task = str(task).strip()
+
+    combined_meta: Dict[str, Any] = {}
+    if hasattr(task, "as_dict") and callable(task.as_dict):
+        try:
+            combined_meta.update(task.as_dict())
+        except Exception:
+            pass
+    if task_metadata:
+        combined_meta.update(task_metadata)
+
+    canonical_meta = _canonicalize_for_cache(combined_meta)
+
+    canonical_rules = []
+    if task_rules:
+        for r in task_rules:
+            if hasattr(r, "model_dump") and callable(r.model_dump):
+                canonical_rules.append(_canonicalize_for_cache(r.model_dump()))
+            elif hasattr(r, "as_dict") and callable(r.as_dict):
+                canonical_rules.append(_canonicalize_for_cache(r.as_dict()))
+            else:
+                canonical_rules.append(_canonicalize_for_cache(str(r)))
+        canonical_rules.sort(key=lambda x: json.dumps(x, sort_keys=True))
+
+    payload = {
+        "task": norm_task,
+        "project_id": str(project_id) if project_id is not None else None,
+        "cli_name": str(cli_name) if cli_name is not None else None,
+        "metadata": canonical_meta,
+        "rules": canonical_rules,
+        "mutation_version": mutation_version,
+    }
+
+    canonical_json_str = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical_json_str.encode("utf-8")).hexdigest()
+
+
+def parse_cliverse_rule_semantics(rule: CliverseRule) -> Dict[str, Any]:
+    """
+    Extracts all Member 2 rule semantics preserved across Member 1's public Rule contract.
+    Returns:
+        dict with: rule_id, description, scope, priority, effect, is_mandatory, target, version
+    """
+    rule_id = rule.rule_id
+    scope = rule.scope
+    priority = rule.priority
+
+    content = rule.content
+    effect = "ALLOW"
+    is_mandatory = False
+    description = content
+
+    if content.startswith("[") and "]" in content:
+        prefix, rest = content[1:].split("]", 1)
+        description = rest.strip()
+        parts = prefix.split()
+        if parts:
+            effect = parts[0]
+            if "MANDATORY" in parts:
+                is_mandatory = True
+
+    target = "unknown"
+    version = 1
+
+    # Deterministic JSON metadata parsing (preserves targets containing semicolons, equals, unicode, spaces)
+    if ";meta=" in rule.source:
+        try:
+            meta_json = rule.source.split(";meta=", 1)[1]
+            data = json.loads(meta_json)
+            if "target" in data:
+                target = data["target"]
+            if "effect" in data:
+                effect = data["effect"]
+            if "mandatory" in data:
+                is_mandatory = bool(data["mandatory"])
+            if "version" in data:
+                version = int(data["version"])
+        except Exception:
+            pass
+    elif rule.source.startswith("rules:"):
+        source_body = rule.source[len("rules:"):]
+        segments = source_body.split(";")
+        if segments:
+            first_seg = segments[0].strip()
+            if "=" in first_seg:
+                k, v = first_seg.split("=", 1)
+                if k.strip().lower() == "target":
+                    target = v.strip()
+            elif first_seg:
+                target = first_seg
+            for seg in segments[1:]:
+                if "=" in seg:
+                    k, v = seg.split("=", 1)
+                    k = k.strip().lower()
+                    v = v.strip()
+                    if k == "effect":
+                        effect = v
+                    elif k == "mandatory":
+                        is_mandatory = (v.lower() == "true")
+                    elif k == "version":
+                        try:
+                            version = int(v)
+                        except ValueError:
+                            pass
+                    elif k == "target":
+                        target = v
+
+
+    return {
+        "rule_id": rule_id,
+        "description": description,
+        "scope": scope,
+        "priority": priority,
+        "effect": effect,
+        "is_mandatory": is_mandatory,
+        "target": target,
+        "version": version,
+    }
+
+
 class CliverseMemoryProviderAdapter:
     """
     Adapter implementing Member 1's MemoryProvider protocol.
@@ -88,8 +252,8 @@ class CliverseMemoryProviderAdapter:
         Member 1's RequestPlanner calls retrieve_context() and get_applicable_rules()
         in sequence for the same task. To prevent two full build_intelligence_context()
         evaluations (double SQLite read + double rule resolution), the adapter maintains a
-        one-slot cache keyed on (task_str, project_id, cli_name). Consecutive calls with
-        identical arguments share one evaluation result.
+        deterministic single-entry cache keyed on cryptographic SHA-256 fingerprint of all
+        result-affecting inputs. Consecutive calls with identical arguments share one evaluation result.
     """
 
     def __init__(
@@ -103,36 +267,48 @@ class CliverseMemoryProviderAdapter:
         self.cli_name = cli_name
         self.last_intelligence_context: Optional[LayaIntelligenceContext] = None
         self.last_member2_rules: Dict[str, Any] = {}
-        # Single-slot cache: (task_str, project_id, cli_name) → LayaIntelligenceContext
-        self._cache_key: Optional[tuple] = None
+        # Single-slot cache: deterministic SHA-256 fingerprint → LayaIntelligenceContext
+        self._cached_key: Optional[str] = None
         self._cached_context: Optional[LayaIntelligenceContext] = None
 
-    def _get_or_build_context(self, task: Any) -> LayaIntelligenceContext:
-        """Returns cached context if task/project/cli match last call; builds otherwise.
+    def invalidate_cache(self) -> None:
+        """Explicitly invalidates the cached intelligence context."""
+        self._cached_key = None
+        self._cached_context = None
+
+    def _get_or_build_context(
+        self,
+        task: Any,
+        task_metadata: Optional[Dict[str, Any]] = None,
+        task_rules: Optional[List[Any]] = None,
+    ) -> LayaIntelligenceContext:
+        """Returns cached context if all result-affecting inputs match; builds otherwise.
 
         This eliminates the double build_intelligence_context() call that occurs when
         Member 1's RequestPlanner invokes retrieve_context() then get_applicable_rules()
         for the same task in a single plan() request.
         """
-        # Normalise task to string for cache key
-        task_str: str
-        if isinstance(task, str):
-            task_str = task.strip()
-        elif hasattr(task, "task"):
-            task_str = str(getattr(task, "task", "")).strip()
-        else:
-            task_str = str(task).strip()
+        mutation_ver = getattr(self.service, "mutation_version", 0)
+        cache_key = compute_adapter_context_cache_key(
+            task=task,
+            project_id=self.project_id,
+            cli_name=self.cli_name,
+            task_metadata=task_metadata,
+            task_rules=task_rules,
+            mutation_version=mutation_ver,
+        )
 
-        cache_key = (task_str, self.project_id, self.cli_name)
-        if self._cache_key == cache_key and self._cached_context is not None:
+        if self._cached_key == cache_key and self._cached_context is not None:
             return self._cached_context
 
         intel: LayaIntelligenceContext = self.service.build_intelligence_context(
             task=task,
             project_id=self.project_id,
             cli_name=self.cli_name,
+            task_metadata=task_metadata,
+            task_rules=task_rules,
         )
-        self._cache_key = cache_key
+        self._cached_key = cache_key
         self._cached_context = intel
         self.last_intelligence_context = intel
         return intel
@@ -144,10 +320,9 @@ class CliverseMemoryProviderAdapter:
     def get_member2_rule(self, rule_id: str) -> Optional[Any]:
         """Returns the complete Member 2 Rule model for a given rule_id.
 
-        This is the reliable access path. The _member2_rule attribute attached directly
-        to frozen CliverseRule dataclasses via object.__setattr__ is best-effort and
-        will not survive pickle, deepcopy, or dataclass replace() operations.
-        Use this method for safe downstream access.
+        This is an auxiliary lookup/debug mechanism on the adapter. The adapted
+        CliverseRule dataclass itself does not carry private attributes and is 100%
+        compliant with Member 1's frozen dataclass model.
         """
         return self.last_member2_rules.get(rule_id)
 
@@ -200,9 +375,16 @@ class CliverseMemoryProviderAdapter:
                 content_str = f"[{r.effect.value}] {r.description}"
                 effective_prio = getattr(r, "effective_priority", r.priority)
 
-            # Preserve structured metadata (effect, mandatory, version) in source provenance
+            # Preserve structured metadata (target, effect, mandatory, version) in source provenance
+            meta_payload = {
+                "target": r.target,
+                "effect": r.effect.value,
+                "mandatory": r.is_mandatory,
+                "version": r.version,
+            }
+            json_meta = json.dumps(meta_payload, sort_keys=True)
             source_str = (
-                f"rules:{r.target};effect={r.effect.value};mandatory={r.is_mandatory};version={r.version}"
+                f"rules:{r.target};target={r.target};effect={r.effect.value};mandatory={r.is_mandatory};version={r.version};meta={json_meta}"
             )
 
             cliverse_rule = CliverseRule(
@@ -212,21 +394,7 @@ class CliverseMemoryProviderAdapter:
                 priority=effective_prio,
                 source=source_str,
             )
-            # Best-effort: attach full Member 2 Rule to the frozen dataclass for
-            # consumers that inspect _member2_rule directly. WARNING: this attribute
-            # is NOT preserved across pickle, deepcopy, or dataclass.replace().
-            # Use adapter.get_member2_rule(rule_id) for reliable downstream access.
-            try:
-                object.__setattr__(cliverse_rule, "_member2_rule", r)
-            except (TypeError, AttributeError) as e:
-                import warnings
-                warnings.warn(
-                    f"Could not attach _member2_rule to CliverseRule '{r.rule_id}': {e}. "
-                    "Use adapter.get_member2_rule(rule_id) instead.",
-                    RuntimeWarning,
-                    stacklevel=2,
-                )
-
+            # Standard public fields only — no object.__setattr__ private mutation
             result_rules.append(cliverse_rule)
 
         return result_rules
@@ -246,6 +414,7 @@ class CliverseMemoryProviderAdapter:
             source_path=source_path,
             title=title,
         )
+        self.invalidate_cache()
         return MemoryRef(
             memory_id=res.record_id,
             source=source_path,

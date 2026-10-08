@@ -1,7 +1,7 @@
 # Member 2 Architecture Specification: RAG & Rules Intelligence
 
 **Subsystem:** CLIVERSE — Member 2 (Memory / RAG + Rules Intelligence)  
-**Status:** All Stages (Stage 1 — Foundation, Stage 2 — Ingestion + Embedding Foundation, Stage 3 — Retrieval + Context Assembly, Stage 3.5 — RAG Validation + Hardening, Stage 4 — Rules Intelligence, Stage 5 — Unified Laya Intelligence Contract, Stage 5.1 — Integration Safety Hardening, Stage 6 — Real Cross-Member Integration, Final — Hardening + Handoff) Complete — 150 Tests Green (Final Handoff Ready)  
+**Status:** All Stages (Stage 1 — Foundation, Stage 2 — Ingestion + Embedding Foundation, Stage 3 — Retrieval + Context Assembly, Stage 3.5 — RAG Validation + Hardening, Stage 4 — Rules Intelligence, Stage 5 — Unified Laya Intelligence Contract, Stage 5.1 — Integration Safety Hardening, Stage 6 — Real Cross-Member Integration, Final — Hardening + Handoff) Complete — 167 Tests Green (Final Handoff Ready)  
 **Authors:** Member 2 Engineering Lead  
 
 ---
@@ -71,7 +71,7 @@ CLIVERSE/
 │   │   └── sqlite_store.py  # SQLite implementation (.envcore/memory/cliverse_memory.db)
 │   ├── retrieval/           # Vector & text search engine
 │   │   ├── __init__.py
-│   │   ├── search.py        # Cosine similarity + BM25 hybrid ranker
+│   │   ├── search.py        # Cosine similarity + keyword overlap hybrid ranker
 │   │   ├── ranking.py       # Deterministic deduplication and threshold filtering
 │   │   └── assembler.py     # ContextPacket assembler with provenance tags
 │   └── manager.py           # Unified MemoryManager facade
@@ -90,13 +90,13 @@ CLIVERSE/
 ├── memory_rules_api.py      # FastAPI APIRouter consumed by Member 3 (Dashboard)
 └── tests/
     ├── test_memory_storage_models.py          # Storage & models (5 tests)
-    ├── test_ingestion_embeddings.py           # Ingestion & embeddings (12 tests)
+    ├── test_ingestion_embeddings.py           # Ingestion & embeddings (14 tests)
     ├── test_retrieval_context.py              # Retrieval & context (12 tests)
-    ├── test_rag_validation.py                 # RAG validation & edge cases (43 tests)
-    ├── test_rules_engine.py                   # Rules intelligence & resolver (29 tests)
+    ├── test_rag_validation.py                 # RAG validation & edge cases (44 tests)
+    ├── test_rules_engine.py                   # Rules intelligence & resolver (37 tests)
     ├── test_laya_intelligence_integration.py  # Facade integration (11 tests)
     ├── test_stage51_hardening.py              # Safety & contract hardening (19 tests)
-    └── test_final_cross_member_integration.py # Real cross-member integration (19 tests)
+    └── test_final_cross_member_integration.py # Real cross-member integration (25 tests)
 ```
 
 ---
@@ -132,7 +132,7 @@ Files / Sessions / Docs
  └─────┬─────┘
        ▼
  ┌───────────┐
- │ Retrieval │ ── Hybrid cosine similarity + BM25 keyword reranker
+ │ Retrieval │ ── Hybrid cosine similarity + keyword overlap reranker
  └─────┬─────┘
        ▼
  ┌──────────────────┐
@@ -449,7 +449,7 @@ class EmbeddingProvider(ABC):
     @abstractmethod
     def model_name(self) -> str: ...
 ```
-* **MVP Default Engine:** `LocalSemanticEmbeddingProvider` (zero third-party dependencies, dense n-gram token vectorizer with cosine normalization, sub-millisecond execution).
+* **MVP Default Engine:** `LocalBaselineEmbeddingProvider` (zero third-party dependencies, lightweight deterministic character n-gram hash baseline with cosine normalization, sub-millisecond execution; not a neural semantic model).
 * **Pluggable Extensions:** Ready for OpenAI (`text-embedding-3-small`), Gemini embeddings, or local Ollama embeddings without API changes.
 
 ---

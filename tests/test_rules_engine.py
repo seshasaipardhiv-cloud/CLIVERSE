@@ -211,6 +211,158 @@ priority: 60
         self.assertEqual(rules[0].effect, RuleEffect.ASK)
         self.assertEqual(rules[0].cli_filter, "claude-cli")
 
+    def test_parse_yaml_quoted_scalar_and_escaped_characters(self):
+        """Verifies quoted scalars with quotes, slashes, and escaped characters parse accurately."""
+        yaml_content = """
+id: "escape-rule"
+name: "Rule with \\"Quotes\\" and \\n newlines"
+scope: "project"
+target: "security"
+effect: "deny"
+description: "Block path: \\"C:\\\\Users\\\\admin\\\\secrets.txt\\""
+priority: 75
+"""
+        rules = RuleParser.parse_string(yaml_content)
+        self.assertEqual(len(rules), 1)
+        self.assertEqual(rules[0].rule_id, "escape-rule")
+        self.assertIn("Quotes", rules[0].name)
+        self.assertIn("secrets.txt", rules[0].description)
+
+    def test_parse_yaml_nested_mapping_and_list(self):
+        """Verifies nested mapping for conditions and list of paths."""
+        yaml_content = """
+id: nested-cond-rule
+name: Nested Conditions
+scope: project
+target: filesystem
+effect: deny
+priority: 50
+description: Block production writes
+conditions:
+  - field: path
+    op: glob
+    value: "prod/**"
+  - field: task
+    op: contains
+    value: "delete"
+"""
+        rules = RuleParser.parse_string(yaml_content)
+        self.assertEqual(len(rules), 1)
+        self.assertEqual(len(rules[0].conditions), 2)
+        self.assertEqual(rules[0].conditions[0].operator, "glob")
+        self.assertEqual(rules[0].conditions[1].operator, "contains")
+
+    def test_parse_yaml_multiline_literal_string(self):
+        """Verifies multiline '|' literal string preservation."""
+        yaml_content = """
+id: multiline-rule
+name: Multiline Rule
+scope: global
+target: audit
+effect: warn
+priority: 20
+description: |
+  Line 1 of detailed instruction.
+  Line 2 of detailed instruction.
+  Line 3 of detailed instruction.
+"""
+        rules = RuleParser.parse_string(yaml_content)
+        self.assertEqual(len(rules), 1)
+        self.assertIn("Line 1", rules[0].description)
+        self.assertIn("Line 2", rules[0].description)
+        self.assertIn("Line 3", rules[0].description)
+
+    def test_parse_yaml_folded_string(self):
+        """Verifies folded '>' string formatting."""
+        yaml_content = """
+id: folded-rule
+name: Folded Rule
+scope: global
+target: documentation
+effect: warn
+priority: 15
+description: >
+  This is a very long instruction that is wrapped
+  across multiple lines in the YAML source but folds
+  into a single coherent line.
+"""
+        rules = RuleParser.parse_string(yaml_content)
+        self.assertEqual(len(rules), 1)
+        self.assertIn("This is a very long instruction", rules[0].description)
+
+    def test_parse_yaml_invalid_rule_structure_rejected(self):
+        """Verifies invalid rule types (e.g. integer or non-dict list items) are rejected."""
+        yaml_content = """
+- 12345
+- "not a mapping"
+"""
+        with self.assertRaises(RuleParseError):
+            RuleParser.parse_string(yaml_content)
+
+    def test_parse_stdlib_json_without_yaml_dependency(self):
+        """Verifies standard library JSON parses cleanly even when PyYAML is unavailable."""
+        import json
+        import rules.parser as parser_mod
+        orig_yaml = parser_mod.yaml
+        try:
+            parser_mod.yaml = None  # simulate missing pyyaml
+            json_text = json.dumps({
+                "id": "json-no-pyyaml",
+                "name": "JSON Stdlib",
+                "scope": "GLOBAL",
+                "target": "security",
+                "effect": "ALLOW",
+                "description": "Standard library JSON works without PyYAML",
+            })
+            parsed = RuleParser.parse_string(json_text)
+            self.assertEqual(len(parsed), 1)
+            self.assertEqual(parsed[0].rule_id, "json-no-pyyaml")
+        finally:
+            parser_mod.yaml = orig_yaml
+
+    def test_pyyaml_unavailable_raises_actionable_import_error(self):
+        """Verifies attempting to parse YAML when PyYAML is missing raises a clear actionable error."""
+        import rules.parser as parser_mod
+        orig_yaml = parser_mod.yaml
+        try:
+            parser_mod.yaml = None  # simulate missing pyyaml
+            yaml_text = "id: needs-pyyaml\nname: Test\nscope: project\neffect: allow\ntarget: gen\ndescription: Test"
+            with self.assertRaises(ImportError) as ctx:
+                RuleParser.parse_string(yaml_text)
+            self.assertIn("pip install pyyaml", str(ctx.exception))
+        finally:
+            parser_mod.yaml = orig_yaml
+
+    def test_parse_yaml_comments_unicode_type_coercion_and_empty_doc(self):
+        """Verifies comments, Unicode, type coercion, and empty documents parse as specified."""
+        # 1. Empty document
+        self.assertEqual(RuleParser.parse_string(""), [])
+        self.assertEqual(RuleParser.parse_string("   \n\t  "), [])
+        self.assertEqual(RuleParser.parse_string("---\n# Just comments\n"), [])
+
+        # 2. YAML with comments and Unicode
+        yaml_content = """
+# Header comment explaining the rule
+id: unicode-rule # inline comment
+name: "Règle de sécurité et clés API"
+scope: project
+target: "sécurité"
+effect: deny
+priority: 85
+description: "Vérifier l'accès sécurisé et bloquer les fuites de clés."
+"""
+        rules = RuleParser.parse_string(yaml_content)
+        self.assertEqual(len(rules), 1)
+        self.assertEqual(rules[0].rule_id, "unicode-rule")
+        self.assertIn("Règle", rules[0].name)
+        self.assertEqual(rules[0].target, "sécurité")
+        self.assertEqual(rules[0].priority, 85)
+
+        # 3. Malformed JSON raises RuleParseError
+        with self.assertRaises(RuleParseError):
+            RuleParser.parse_string("{ 'bad': json, invalid }")
+
+
     # ── 3. APPLICABILITY & ISOLATION ──────────────────────────────────────────
 
     def test_global_rule_applies_everywhere(self):

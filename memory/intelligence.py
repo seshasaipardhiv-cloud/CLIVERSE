@@ -228,6 +228,11 @@ class LayaIntelligenceService:
         self.rules_engine = rules_engine or RulesEngine()
         self._storage = storage
         self._ingestion_pipeline = ingestion_pipeline
+        self.mutation_version: int = 0
+
+    def invalidate_cache(self) -> None:
+        """Explicitly increments the mutation version, invalidating any cached context."""
+        self.mutation_version += 1
 
     # ── Core Unified Facade ───────────────────────────────────────────────────
 
@@ -397,7 +402,7 @@ class LayaIntelligenceService:
     ) -> IngestionResult:
         """Stores a document or code artifact in persistent memory via IngestionPipeline."""
         pipeline = self._ingestion_pipeline or IngestionPipeline(storage=self._get_storage())
-        return pipeline.ingest(
+        res = pipeline.ingest(
             content=content,
             project_id=project_id,
             source_type=source_type,
@@ -407,6 +412,8 @@ class LayaIntelligenceService:
             tags=tags,
             metadata=metadata,
         )
+        self.mutation_version += 1
+        return res
 
     def search_memory(
         self,
@@ -449,13 +456,17 @@ class LayaIntelligenceService:
     def delete_memory(self, record_id: str) -> bool:
         """Deletes a memory record and its associated chunks."""
         storage = self._get_storage()
-        return storage.delete_record(record_id)
+        res = storage.delete_record(record_id)
+        self.mutation_version += 1
+        return res
 
     # ── Stable Rules Subsystem APIs ───────────────────────────────────────────
 
     def create_rule(self, rule: Rule) -> Rule:
         """Creates and stores a new rule."""
-        return self.rules_engine.create_rule(rule)
+        res = self.rules_engine.create_rule(rule)
+        self.mutation_version += 1
+        return res
 
     def get_rule(self, rule_id: str) -> Optional[Rule]:
         """Retrieves a rule by ID."""
@@ -463,11 +474,15 @@ class LayaIntelligenceService:
 
     def update_rule(self, rule: Rule) -> Rule:
         """Updates an existing rule."""
-        return self.rules_engine.update_rule(rule)
+        res = self.rules_engine.update_rule(rule)
+        self.mutation_version += 1
+        return res
 
     def delete_rule(self, rule_id: str) -> bool:
         """Deletes a rule by ID."""
-        return self.rules_engine.delete_rule(rule_id)
+        res = self.rules_engine.delete_rule(rule_id)
+        self.mutation_version += 1
+        return res
 
     def list_rules(
         self,
@@ -542,7 +557,7 @@ class LayaIntelligenceService:
         if hasattr(task, "task"):
             val = getattr(task, "task")
             if isinstance(val, str) and val.strip():
-                return val
+                return val.strip()
             raise ValueError("TaskLike object must provide a non-empty string in .task attribute.")
         raise TypeError(
             f"Invalid task input: expected str or TaskLike protocol object with .task attribute, got {type(task).__name__}."

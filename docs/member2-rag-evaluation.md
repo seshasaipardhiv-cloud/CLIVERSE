@@ -352,9 +352,9 @@ These fields would allow the retrieval reranker to boost `decided` memories over
 
 ---
 
-## 16. Production Readiness Assessment
+## 16. Subsystem Verification Assessment (Hackathon MVP)
 
-**Stage 3.5 Verdict: CONDITIONALLY READY for Hackathon MVP**
+**Stage Final Verdict: VERIFIED for Hackathon MVP**
 
 | Criterion | Status |
 |---|---|
@@ -366,8 +366,98 @@ These fields would allow the retrieval reranker to boost `decided` memories over
 | Evaluation from actual data | ✅ PASS |
 | Failures visible and documented | ✅ PASS |
 | No false embedding quality claims | ✅ PASS |
-| All 93 tests pass | ✅ PASS |
+| All 167 Member 2 tests pass | ✅ PASS |
 | Recall@5 ≥ 80% on eval dataset | ✅ 88% |
 | MRR ≥ 0.7 | ✅ 0.817 |
 
 **Conditional:** The local embedding baseline has documented limitations. For any demo query that uses vocabulary radically different from source documents (e.g. `"persistence technology"` when the doc says `"database"`), retrieval will rely on the 0.3 keyword weight. Design demo queries to have moderate vocabulary overlap, or swap in a neural embedding provider before the demo.
+
+---
+
+## 17. Adversarial Diagnostic Evaluation (Stage Final)
+
+Evaluated via [`scripts/evaluate_retrieval_adversarial.py`](file:///A:/CLIVERSE/scripts/evaluate_retrieval_adversarial.py) against [`tests/fixtures/retrieval_eval_adversarial.json`](file:///A:/CLIVERSE/tests/fixtures/retrieval_eval_adversarial.json):
+
+- **Total Adversarial Queries:** 20 (16 Positive Queries, 4 Negative Queries)
+- **Overall Succeeded (@5):** 15 / 20 queries (75.0%)
+- **Overall Failed (@5):** 5 / 20 queries (25.0%)
+
+### 17.1 Positive Query Metrics (16 Queries — Unpolluted by Negatives)
+- **Recall@1:** 58.3%
+- **Recall@3:** 66.7%
+- **Recall@5:** 69.8%
+- **Precision@1:** 68.8%
+- **Precision@3:** 41.7%
+- **Precision@5:** 33.8%
+- **MRR (Mean Reciprocal Rank):** 0.731
+- **Positive Succeeded (@5):** 13 / 16 queries
+- **Positive Failed (@5):** 3 / 16 queries (attributed to `relevant candidate ranked below top-K`)
+
+### 17.2 Negative / Out-of-Domain Query Behavior (4 Queries)
+- **True Negatives (Clean Rejection):** 2 / 4 queries
+- **False Positives:** 2 / 4 queries
+- **True-Negative Rejection Rate:** 50.0%
+- **False-Positive Rate:** 50.0%
+- **Average Candidates Retrieved Above Threshold:** 2.50 candidates
+
+### 17.3 Causal Failure Attribution Breakdown (5 Total Failures)
+1. `relevant candidate ranked below top-K`: 3 queries (synonym/terminology substitutions where character n-gram hash baseline lacked cross-lexical projection).
+2. `false positive candidates retrieved`: 2 queries (irrelevant negative queries whose character n-gram noise exceeded the min_score threshold of 0.10).
+
+---
+
+## 18. Formal Metric Definitions & Evaluation Formulas
+
+The evaluation harness implements standard Information Retrieval (IR) metrics under deterministic definitions:
+
+### 18.1 Relevant Chunk Definition
+A retrieved candidate chunk is defined as **relevant** if and only if its `source_path` matches one of the canonical file paths listed in the query's ground-truth `expected_sources`.
+
+### 18.2 Positive vs. Negative Query Separation
+Negative queries have $\text{expected\_sources} = \emptyset$. They are evaluated strictly under rejection metrics and are **never mixed into positive Recall or MRR calculations**, avoiding artificial metric inflation.
+
+### 18.3 Recall@K Formula & Denominator (Positive Queries)
+For positive queries with $M = |\text{expected\_sources}| > 0$:
+$$\text{Recall@K} = \frac{|\{s \in \text{expected\_sources} \mid s \in \text{top\_k\_paths}\}|}{M}$$
+- The denominator is always the total number of expected relevant sources ($M$).
+- Found sources are deduplicated across chunks.
+
+### 18.4 Precision@K Formula & Denominator (Positive Queries)
+For positive queries:
+$$\text{Precision@K} = \frac{\sum_{r \in \text{results}[:K]} \mathbb{I}(r.\text{source\_path} \in \text{expected\_sources})}{\min(K, |\text{results}[:K]|)}$$
+- The denominator is the actual number of candidates evaluated in top-K ($\le K$).
+
+### 18.5 Mean Reciprocal Rank (MRR) (Positive Queries)
+For positive query $q_i$, let $\text{rank}_i$ be the 1-based position of the first relevant chunk in the ordered results:
+$$\text{RR}_i = \begin{cases} \frac{1}{\text{rank}_i} & \text{if relevant chunk retrieved} \\ 0.0 & \text{otherwise} \end{cases}$$
+$$\text{MRR} = \frac{1}{N_{\text{pos}}} \sum_{i=1}^{N_{\text{pos}}} \text{RR}_i$$
+
+### 18.6 Negative Query Rejection Metrics
+$$\text{Rejection Rate} = \frac{\text{True Negatives}}{N_{\text{neg}}}$$
+$$\text{False-Positive Rate} = \frac{\text{False Positives}}{N_{\text{neg}}}$$
+
+---
+
+## 19. Storage Scaling Characterization: SQLite Table Scan Diagnosis
+
+Measured via [`scripts/characterize_sqlite_scaling.py`](file:///A:/CLIVERSE/scripts/characterize_sqlite_scaling.py):
+
+| Corpus Size (Chunks) | Avg Search Latency | Throughput (QPS) | Architectural Classification |
+|---|---|---|---|
+| **100** | 3.14 ms | 318.8 | Hackathon MVP Ready |
+| **500** | 12.23 ms | 81.8 | Hackathon MVP Ready |
+| **1,000** | 23.81 ms | 42.0 | Hackathon MVP Upper Bound |
+| **2,500** | 58.01 ms | 17.2 | Latency degradation noticeable |
+| **5,000** | 121.29 ms | 8.2 | Unacceptable for live keystroke search |
+
+**Diagnostic Assessment:**
+- Search execution performs a linear table scan $\mathcal{O}(N)$ in SQLite followed by in-memory pure-Python vector deserialization and cosine similarity loops.
+- SQLite with Python-side vector scoring is suitable for the local hackathon MVP corpus (<1,000 chunks); ANN/vector-database scaling (sqlite-vec, FAISS, pgvector) is future work.
+
+---
+
+## 20. Code Chunking & Token Budgeting Limitations
+
+1. **Heuristic Structure-Aware Chunking:** Text chunking uses regular expressions for markdown headers and function definitions (`def `, `class `, `function `). It is heuristic structure-aware chunking, not a universal language parser. Highly nested code, multi-line decorators, and complex TypeScript interfaces are chunked without data loss, but AST-level parse preservation is deferred to future work.
+2. **Approximate Token Budgeting:** Token counting uses an approximate character-based planning budget ($\max(1, \lceil \text{length}/4 \rceil)$), not tokenizer-exact accounting. BPE tokenizers (e.g. `tiktoken`) are deferred to post-hackathon roadmap.
+

@@ -1,7 +1,7 @@
 # Member 2 Integration Guide: Memory & Retrieval Interfaces
 
 **Subsystem:** CLIVERSE — Member 2 (Memory / RAG + Rules Intelligence)  
-**Status:** All Stages (Stage 1 — Foundation, Stage 2 — Ingestion + Embedding Foundation, Stage 3 — Retrieval + Context Assembly, Stage 3.5 — RAG Validation + Hardening, Stage 4 — Rules Intelligence, Stage 5 — Unified Laya Intelligence Contract, Stage 5.1 — Integration Safety Hardening, Stage 6 — Real Cross-Member Integration, Final — Hardening + Handoff) Complete — 150 Tests Green (Final Handoff Ready)  
+**Status:** All Stages (Stage 1 — Foundation, Stage 2 — Ingestion + Embedding Foundation, Stage 3 — Retrieval + Context Assembly, Stage 3.5 — RAG Validation + Hardening, Stage 4 — Rules Intelligence, Stage 5 — Unified Laya Intelligence Contract, Stage 5.1 — Integration Safety Hardening, Stage 6 — Real Cross-Member Integration, Final — Hardening + Handoff) Complete — 167 Tests Green (Final Handoff Ready; Repo: 235 passed, 0 failed, 2 skipped due to documented environment-specific requirements across 237 collected items)  
 **Target Consumers:** Member 1 (Core + Laya Engine), Member 3 (Dashboard UI)  
 
 ---
@@ -26,7 +26,7 @@ This guide specifies how external subsystems interact with Member 2's persistent
 | **Unified Intelligence Contract** | ✅ **Implemented (Stage 5)** | `build_intelligence_context()` coordinating Memory + Rules for Member 1 (Laya) |
 | **Safety + Contract Hardening** | ✅ **Implemented (Stage 5.1)** | `SubsystemStatus`, `RuleDecision`, `TaskLike` protocol; strict ERROR vs OK_EMPTY semantics |
 | **Cross-Member Integration** | ✅ **Implemented (Stage 6)** | `CliverseMemoryProviderAdapter`, native `RequestPlanner` integration |
-| **Final Hardening & Freeze** | ✅ **Complete (Final)** | 150 tests, single-entry adapter cache, whitespace stripping, zero duplicate evaluation |
+| **Final Hardening & Freeze** | ✅ **Complete (Final)** | 167 tests, target preservation, deterministic cryptographic cache key, explicit cache invalidation, frozen contract compliance |
 | **REST API Router** | ⏳ *Planned (Post-Hackathon)* | FastAPI endpoints for Member 3 Dashboard |
 
 ---

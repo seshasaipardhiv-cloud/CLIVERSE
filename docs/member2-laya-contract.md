@@ -3,7 +3,7 @@
 **Subsystem:** CLIVERSE — Member 2 (Memory / RAG & Rules Intelligence)  
 **Contract Version:** 1.1 (Stage 5.1 Hardened)  
 **Target Consumer:** Member 1 (Core Execution Engine & Laya Intent Processor)  
-**Status:** Implemented, Hardened & Frozen (All Stages 1–6 & Final — 150 Tests Green)
+**Status:** Implemented, Hardened & Verified (All Stages 1–6 & Final — 167 Tests Green; Repo: 235 passed, 0 failed, 2 skipped due to documented environment-specific requirements across 237 collected items)
 
 ---
 
@@ -40,8 +40,8 @@ Member 2 provides the cognitive context and engineering constraint intelligence 
 
 Member 2 keeps memory retrieval and rules evaluation logically separated internally, while providing a single, unified, serializable result object: [`LayaIntelligenceContext`](file:///A:/CLIVERSE/memory/intelligence.py).
 
-> **Important:** `rule_decision` represents developer/project rule resolution only.  
-> It is **NOT** the final security or execution authorization. That responsibility belongs to Member 4 (TrustGate).
+> **Member 2 rule_decision is not execution authorization. Member 4 TrustGate is the final execution authorization authority.**  
+> `rule_decision` represents developer/project rule resolution only. Member 4 governs final execution authorization and sandboxing.
 
 ---
 

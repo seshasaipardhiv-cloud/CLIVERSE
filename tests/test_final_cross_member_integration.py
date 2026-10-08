@@ -674,15 +674,15 @@ class TestFinalCrossMemberIntegration(unittest.TestCase):
         self.assertIn("effect=REQUIRE", req_rule.source)
         self.assertIn("mandatory=False", req_rule.source)
 
-        # 3. Direct access to untruncated Member 2 Rule models
-        m2_mand = getattr(mand_rule, "_member2_rule", None)
-        self.assertIsNotNone(m2_mand)
-        self.assertTrue(m2_mand.is_mandatory)
-        self.assertEqual(m2_mand.effect, RuleEffect.DENY)
-
+        # 3. Direct access to untruncated Member 2 Rule models via adapter lookup
         lookup_m2 = self.adapter.get_member2_rule("mand-deny-keys")
         self.assertIsNotNone(lookup_m2)
+        self.assertTrue(lookup_m2.is_mandatory)
+        self.assertEqual(lookup_m2.effect, RuleEffect.DENY)
         self.assertEqual(lookup_m2.description, "Never commit private API keys.")
+
+        # Frozen dataclass must NOT carry private _member2_rule attribute
+        self.assertFalse(hasattr(mand_rule, "_member2_rule"))
 
         # 4. Context preservation on adapter
         last_ctx = self.adapter.get_last_intelligence_context()
@@ -839,6 +839,448 @@ class TestFinalCrossMemberIntegration(unittest.TestCase):
         self.assertEqual(len(rules), 1)
         self.assertEqual(rules[0].rule_id, "json-rule-1")
         self.assertEqual(rules[0].effect, RuleEffect.DENY)
+
+    # ── 16. P0-1: DETERMINISTIC ADAPTER CACHE FINGERPRINT ────────────────────
+
+    def test_adapter_cache_key_deterministic_and_comprehensive(self):
+        """
+        P0-1 verification:
+          A. same logical request -> exactly one build_intelligence_context call.
+          B. different task -> no reuse.
+          C. different project_id -> no reuse.
+          D. different cli_name -> no reuse.
+          E. different task_metadata -> no reuse.
+          F. different task_rules -> no reuse.
+          G. same dictionaries with different key insertion order -> SAME cache key.
+        """
+        from memory.adapter import compute_adapter_context_cache_key
+
+        calls = {"count": 0}
+        orig_build = self.service.build_intelligence_context
+
+        def tracked_build(*args, **kwargs):
+            calls["count"] += 1
+            return orig_build(*args, **kwargs)
+
+        self.service.build_intelligence_context = tracked_build
+
+        # A. Same logical request: exactly one build
+        task_a = "Deploy to production cluster"
+        _ = self.adapter.retrieve_context(task_a)
+        _ = self.adapter.get_applicable_rules(task_a)
+        self.assertEqual(calls["count"], 1, "Sequential calls with same request must reuse cache")
+
+        # B. Different task: triggers rebuild
+        _ = self.adapter.retrieve_context("Rollback release")
+        self.assertEqual(calls["count"], 2, "Different task must trigger new build")
+
+        # C. Different project_id: triggers rebuild
+        adapter_b = CliverseMemoryProviderAdapter(service=self.service, project_id="proj-other", cli_name="claude-cli")
+        _ = adapter_b.retrieve_context("Rollback release")
+        self.assertEqual(calls["count"], 3, "Different project_id must trigger new build")
+
+        # D. Different cli_name: triggers rebuild
+        adapter_c = CliverseMemoryProviderAdapter(service=self.service, project_id="proj-other", cli_name="aider")
+        _ = adapter_c.retrieve_context("Rollback release")
+        self.assertEqual(calls["count"], 4, "Different cli_name must trigger new build")
+
+        # E. Different task_metadata: produces different cache key
+        key_meta1 = compute_adapter_context_cache_key("task", "proj", "cli", task_metadata={"env": "prod"})
+        key_meta2 = compute_adapter_context_cache_key("task", "proj", "cli", task_metadata={"env": "staging"})
+        self.assertNotEqual(key_meta1, key_meta2, "Different task_metadata must produce different cache key")
+
+        # F. Different task_rules: produces different cache key
+        r1 = Rule(rule_id="r1", name="R1", scope=RuleScope.TASK, target="t1", effect=RuleEffect.WARN, description="d1")
+        r2 = Rule(rule_id="r2", name="R2", scope=RuleScope.TASK, target="t2", effect=RuleEffect.DENY, description="d2")
+        key_rules1 = compute_adapter_context_cache_key("task", "proj", "cli", task_rules=[r1])
+        key_rules2 = compute_adapter_context_cache_key("task", "proj", "cli", task_rules=[r2])
+        self.assertNotEqual(key_rules1, key_rules2, "Different task_rules must produce different cache key")
+
+        # G. Same dictionaries with different key insertion order: SAME cache key
+        dict_order_1 = {"alpha": 1, "beta": 2, "gamma": {"nested_z": 9, "nested_a": 8}}
+        dict_order_2 = {"gamma": {"nested_a": 8, "nested_z": 9}, "beta": 2, "alpha": 1}
+        key_ord1 = compute_adapter_context_cache_key("task", "proj", "cli", task_metadata=dict_order_1)
+        key_ord2 = compute_adapter_context_cache_key("task", "proj", "cli", task_metadata=dict_order_2)
+        self.assertEqual(key_ord1, key_ord2, "Dictionary key insertion order must not change cache key")
+
+        # H. Same rules with different list ordering: SAME cache key
+        key_rules_perm1 = compute_adapter_context_cache_key("task", "proj", "cli", task_rules=[r1, r2])
+        key_rules_perm2 = compute_adapter_context_cache_key("task", "proj", "cli", task_rules=[r2, r1])
+        self.assertEqual(key_rules_perm1, key_rules_perm2, "Rule list ordering must not change cache key")
+
+    # ── 17. P0-2: EXPLICIT CACHE INVALIDATION ON MUTATIONS ────────────────────
+
+    def test_cache_invalidation_on_memory_and_rule_mutations(self):
+        """
+        P0-2 verification:
+          1. Build context and confirm cache reuse.
+          2. Mutate memory (store_memory) -> confirm context rebuild.
+          3. Mutate memory (delete_memory) -> confirm context rebuild.
+          4. Mutate rules (create_rule) -> confirm context rebuild.
+          5. Mutate rules (update_rule) -> confirm context rebuild.
+          6. Mutate rules (delete_rule) -> confirm context rebuild.
+        """
+        calls = {"count": 0}
+        orig_build = self.service.build_intelligence_context
+
+        def tracked_build(*args, **kwargs):
+            calls["count"] += 1
+            return orig_build(*args, **kwargs)
+
+        self.service.build_intelligence_context = tracked_build
+
+        task = "Verify database connection pooling"
+
+        # 1. Initial build
+        _ = self.adapter.retrieve_context(task)
+        self.assertEqual(calls["count"], 1)
+        # Re-request -> cache hit
+        _ = self.adapter.get_applicable_rules(task)
+        self.assertEqual(calls["count"], 1, "Must hit cache")
+
+        # 2. Mutate memory via adapter.store_memory
+        ref = self.adapter.store_memory({
+            "content": "Database pooling uses max 20 connections.",
+            "source_path": "docs/db_pool.md",
+        })
+        self.assertIsNotNone(ref.memory_id)
+
+        # Re-request -> cache must be invalidated, triggering rebuild
+        _ = self.adapter.retrieve_context(task)
+        self.assertEqual(calls["count"], 2, "Memory store must invalidate cache")
+
+        # Re-request -> cache hit
+        _ = self.adapter.get_applicable_rules(task)
+        self.assertEqual(calls["count"], 2)
+
+        # 3. Mutate memory via service.delete_memory
+        deleted = self.service.delete_memory(ref.memory_id)
+        self.assertTrue(deleted)
+
+        _ = self.adapter.retrieve_context(task)
+        self.assertEqual(calls["count"], 3, "Memory delete must invalidate cache")
+
+        # 4. Mutate rules via service.create_rule
+        new_rule = Rule(
+            rule_id="pool-limit-rule",
+            name="Pool Limit",
+            scope=RuleScope.PROJECT,
+            project_id="proj-cliverse",
+            target="database",
+            effect=RuleEffect.REQUIRE,
+            description="Max pool size 20",
+        )
+        self.service.create_rule(new_rule)
+
+        _ = self.adapter.retrieve_context(task)
+        self.assertEqual(calls["count"], 4, "Rule creation must invalidate cache")
+
+        # 5. Mutate rules via service.update_rule
+        new_rule.description = "Max pool size 30"
+        self.service.update_rule(new_rule)
+
+        _ = self.adapter.retrieve_context(task)
+        self.assertEqual(calls["count"], 5, "Rule update must invalidate cache")
+
+        # 6. Mutate rules via service.delete_rule
+        self.service.delete_rule("pool-limit-rule")
+
+        _ = self.adapter.retrieve_context(task)
+        self.assertEqual(calls["count"], 6, "Rule deletion must invalidate cache")
+
+    # ── 18. P0-3: FROZEN DATACLASS COMPLIANCE WITHOUT _member2_rule HACK ──────
+
+    def test_frozen_dataclass_adapter_rule_contract_compliance(self):
+        """
+        P0-3 verification:
+          1. Adapted rule contains all required externally visible semantics.
+          2. Deep copy remains semantically identical.
+          3. Serialization/deserialization retains semantics.
+          4. No _member2_rule private attribute is present.
+          5. parse_cliverse_rule_semantics extracts all fields cleanly.
+        """
+        import copy
+        from memory.adapter import parse_cliverse_rule_semantics
+
+        self.service.create_rule(Rule(
+            rule_id="strict-auth-gate",
+            name="Strict Auth Gate",
+            scope=RuleScope.GLOBAL,
+            target="security",
+            effect=RuleEffect.DENY,
+            is_mandatory=True,
+            version=3,
+            priority=85,
+            description="Strictly reject unauthorized operations.",
+        ))
+
+        rules = self.adapter.get_applicable_rules(task="Execute sensitive command")
+        rule_map = {r.rule_id: r for r in rules}
+        self.assertIn("strict-auth-gate", rule_map)
+        adapted_rule = rule_map["strict-auth-gate"]
+
+        # 1. No _member2_rule attribute exists
+        self.assertFalse(hasattr(adapted_rule, "_member2_rule"))
+        self.assertNotIn("_member2_rule", adapted_rule.__dict__ if hasattr(adapted_rule, "__dict__") else ())
+
+        # 2. Required semantics preserved in public fields
+        self.assertEqual(adapted_rule.rule_id, "strict-auth-gate")
+        self.assertIn("[DENY MANDATORY]", adapted_rule.content)
+        self.assertIn("Strictly reject unauthorized operations.", adapted_rule.content)
+        self.assertEqual(adapted_rule.scope, "global")
+        self.assertGreaterEqual(adapted_rule.priority, 9999)  # Elevated for mandatory
+        self.assertIn("effect=DENY", adapted_rule.source)
+        self.assertIn("mandatory=True", adapted_rule.source)
+        self.assertIn("version=3", adapted_rule.source)
+        self.assertIn("rules:security", adapted_rule.source)
+
+        # 3. parse_cliverse_rule_semantics extracts all attributes
+        semantics = parse_cliverse_rule_semantics(adapted_rule)
+        self.assertEqual(semantics["rule_id"], "strict-auth-gate")
+        self.assertEqual(semantics["effect"], "DENY")
+        self.assertTrue(semantics["is_mandatory"])
+        self.assertEqual(semantics["target"], "security")
+        self.assertEqual(semantics["version"], 3)
+        self.assertEqual(semantics["description"], "Strictly reject unauthorized operations.")
+
+        # 4. Deep copy remains semantically identical
+        rule_copy = copy.deepcopy(adapted_rule)
+        self.assertEqual(rule_copy.rule_id, adapted_rule.rule_id)
+        self.assertEqual(rule_copy.content, adapted_rule.content)
+        self.assertEqual(rule_copy.source, adapted_rule.source)
+        self.assertEqual(rule_copy.priority, adapted_rule.priority)
+        self.assertEqual(parse_cliverse_rule_semantics(rule_copy), semantics)
+
+    # ── 19. P0-4: EXACTLY ONE EVALUATION IN resolve_rules & build_context ─────
+
+    def test_resolve_rules_has_exactly_one_evaluation_and_resolution(self):
+        """
+        P0-4 verification:
+          1. Direct service.resolve_rules() executes:
+             - exactly ONE applicability evaluation
+             - exactly ONE conflict resolution
+          2. service.build_intelligence_context() executes:
+             - exactly ONE applicability evaluation
+             - exactly ONE conflict resolution
+        """
+        from rules.resolver import RuleResolver
+        eval_counts = {"applicable": 0, "resolve": 0}
+
+        orig_applicable = self.service.rules_engine.get_applicable_rules
+        orig_resolve = RuleResolver.resolve
+
+        def tracked_applicable(*args, **kwargs):
+            eval_counts["applicable"] += 1
+            return orig_applicable(*args, **kwargs)
+
+        def tracked_resolve(*args, **kwargs):
+            eval_counts["resolve"] += 1
+            return orig_resolve(*args, **kwargs)
+
+        self.service.rules_engine.get_applicable_rules = tracked_applicable
+        RuleResolver.resolve = staticmethod(tracked_resolve)
+
+        try:
+            # 1. Direct call to service.resolve_rules()
+            eval_counts["applicable"] = 0
+            eval_counts["resolve"] = 0
+
+            res = self.service.resolve_rules(task="Verify single evaluation in direct call", project_id="proj-cliverse")
+            self.assertIsNotNone(res)
+            self.assertEqual(eval_counts["applicable"], 1, "Direct resolve_rules must evaluate applicability exactly once")
+            self.assertEqual(eval_counts["resolve"], 1, "Direct resolve_rules must resolve conflicts exactly once")
+
+            # 2. Call to service.build_intelligence_context()
+            eval_counts["applicable"] = 0
+            eval_counts["resolve"] = 0
+
+            ctx = self.service.build_intelligence_context(task="Verify single evaluation in build context", project_id="proj-cliverse")
+            self.assertIsNotNone(ctx)
+            self.assertEqual(eval_counts["applicable"], 1, "build_intelligence_context must evaluate applicability exactly once")
+            self.assertEqual(eval_counts["resolve"], 1, "build_intelligence_context must resolve conflicts exactly once")
+
+        finally:
+            RuleResolver.resolve = orig_resolve
+
+    # ── 20. MEMBER 2 → MEMBER 1 RULE TARGET PRESERVATION (P0-3 EXTENSION) ────
+
+    def test_rule_target_and_all_semantics_preservation_across_adapter(self):
+        """
+        Verify that target, rule_id, description, scope, priority, effect,
+        mandatory state, and version all survive adaptation to Member 1's frozen Rule.
+        Constructs:
+          rule_id = 'db-001'
+          target = 'database'
+          effect = REQUIRE
+          is_mandatory = True
+          version = 7
+        Proves:
+          1. 'database' remains recoverable via parse_cliverse_rule_semantics.
+          2. 'database' is present in public source provenance representation.
+          3. Survives copy.deepcopy().
+          4. Survives dataclass serialization (asdict / tuple / dict).
+          5. No object.__setattr__ or hidden private attributes are used.
+        """
+        import copy
+        from dataclasses import asdict
+        from memory.adapter import parse_cliverse_rule_semantics
+
+        db_rule = Rule(
+            rule_id="db-001",
+            name="Database Connection Safety",
+            scope=RuleScope.PROJECT,
+            project_id="proj-cliverse",
+            target="database",
+            effect=RuleEffect.REQUIRE,
+            is_mandatory=True,
+            version=7,
+            priority=75,
+            description="Use connection pool for all database interactions.",
+        )
+        self.service.create_rule(db_rule)
+
+        rules = self.adapter.get_applicable_rules(task="Query database records")
+        rule_map = {r.rule_id: r for r in rules}
+        self.assertIn("db-001", rule_map)
+        adapted = rule_map["db-001"]
+
+        # 1. Verify target in public source provenance representation
+        self.assertIn("database", adapted.source)
+        self.assertTrue(
+            "rules:database" in adapted.source or "target=database" in adapted.source
+        )
+
+        # 2. Verify exact recovery through parse_cliverse_rule_semantics
+        recovered = parse_cliverse_rule_semantics(adapted)
+        self.assertEqual(recovered["rule_id"], "db-001")
+        self.assertEqual(recovered["target"], "database")
+        self.assertEqual(recovered["effect"], "REQUIRE")
+        self.assertTrue(recovered["is_mandatory"])
+        self.assertEqual(recovered["version"], 7)
+        self.assertEqual(recovered["scope"], "project")
+        self.assertEqual(recovered["description"], "Use connection pool for all database interactions.")
+
+        # 3. Verify survival after copy.deepcopy()
+        cloned = copy.deepcopy(adapted)
+        self.assertEqual(cloned.rule_id, "db-001")
+        cloned_recovered = parse_cliverse_rule_semantics(cloned)
+        self.assertEqual(cloned_recovered["target"], "database")
+        self.assertEqual(cloned_recovered["effect"], "REQUIRE")
+        self.assertTrue(cloned_recovered["is_mandatory"])
+        self.assertEqual(cloned_recovered["version"], 7)
+
+        # 4. Verify survival after normal dataclass serialization
+        serialized = asdict(adapted)
+        self.assertEqual(serialized["rule_id"], "db-001")
+        self.assertIn("target=database", serialized["source"])
+        from cliverse.contracts import Rule as CliverseRule
+        reconstructed = CliverseRule(**serialized)
+        recon_recovered = parse_cliverse_rule_semantics(reconstructed)
+        self.assertEqual(recon_recovered["target"], "database")
+        self.assertEqual(recon_recovered["version"], 7)
+
+        # 5. Strict negative assertion: no object.__setattr__ hack or private attrs
+        self.assertFalse(hasattr(adapted, "_member2_rule"))
+        self.assertNotIn("_member2_rule", getattr(adapted, "__dict__", {}))
+
+        # 6. Test edge-case targets: semicolons, equals, unicode, spaces
+        edge_targets = [
+            "database;primary",
+            "auth=jwt",
+            "données;clés",
+            "user service",
+        ]
+        for idx, edge_target in enumerate(edge_targets, start=2):
+            edge_rule = Rule(
+                rule_id=f"rule-target-{idx}",
+                name=f"Rule Target {idx}",
+                scope=RuleScope.TASK,
+                target=edge_target,
+                effect=RuleEffect.DENY,
+                is_mandatory=False,
+                version=idx,
+                description=f"Rule targeting {edge_target}",
+            )
+            self.service.create_rule(edge_rule)
+            edge_adapted_list = self.adapter.get_applicable_rules(task="Query target")
+            edge_map = {r.rule_id: r for r in edge_adapted_list}
+            self.assertIn(f"rule-target-{idx}", edge_map)
+            edge_adapted = edge_map[f"rule-target-{idx}"]
+
+            # Parse recovered
+            edge_rec = parse_cliverse_rule_semantics(edge_adapted)
+            self.assertEqual(edge_rec["target"], edge_target, f"Failed recovering target: {edge_target}")
+            self.assertEqual(edge_rec["effect"], "DENY")
+            self.assertEqual(edge_rec["version"], idx)
+
+            # Deep copy
+            edge_clone = copy.deepcopy(edge_adapted)
+            self.assertEqual(parse_cliverse_rule_semantics(edge_clone)["target"], edge_target)
+
+            # Dataclass serialization & reconstruction
+            edge_ser = asdict(edge_adapted)
+            edge_recon = CliverseRule(**edge_ser)
+            self.assertEqual(parse_cliverse_rule_semantics(edge_recon)["target"], edge_target)
+
+    # ── 21. TASK NORMALIZATION & VALIDATION (P0-4) ───────────────────────────
+
+    def test_task_normalization_and_validation(self):
+        """
+        P0-4 verification:
+          1. '   add auth   ' -> 'add auth'
+          2. '\t add auth \n' -> 'add auth'
+          3. Whitespace-only -> ValueError
+          4. Empty string -> ValueError
+          5. TaskLike object with valid task is normalized
+          6. TaskLike object with empty or whitespace-only task -> ValueError
+          7. Invalid input types (int, list, dict) -> TypeError (no str(task) coercion)
+        """
+        extract = self.service._extract_task_text
+
+        # 1. Normalization of whitespace
+        self.assertEqual(extract("   add auth   "), "add auth")
+        self.assertEqual(extract("\t add auth \n"), "add auth")
+        self.assertEqual(extract("add auth"), "add auth")
+
+        # 2. Empty and whitespace-only rejection
+        with self.assertRaises(ValueError):
+            extract("")
+        with self.assertRaises(ValueError):
+            extract("   ")
+        with self.assertRaises(ValueError):
+            extract("\t\n  \r")
+
+        # 3. TaskLike protocol objects
+        task_obj = StructuredTask(
+            role="Dev",
+            context="Ctx",
+            task="   build service   ",
+            requirements=(),
+            constraints=(),
+            output="Done",
+        )
+        self.assertEqual(extract(task_obj), "build service")
+
+        # 4. TaskLike with whitespace or empty task
+        empty_task_obj = StructuredTask(
+            role="Dev",
+            context="Ctx",
+            task="   ",
+            requirements=(),
+            constraints=(),
+            output="Done",
+        )
+        with self.assertRaises(ValueError):
+            extract(empty_task_obj)
+
+        # 5. Invalid input types (must raise TypeError without silent coercion)
+        with self.assertRaises(TypeError):
+            extract(12345)
+        with self.assertRaises(TypeError):
+            extract(["add auth"])
+        with self.assertRaises(TypeError):
+            extract({"task_content": "add auth"})
+
 
 
 if __name__ == "__main__":

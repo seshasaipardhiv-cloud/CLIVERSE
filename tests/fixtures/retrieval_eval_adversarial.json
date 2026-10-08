@@ -1,0 +1,235 @@
+{
+  "version": "1.0",
+  "description": "CLIVERSE Member 2 RAG Retrieval Adversarial Evaluation Dataset — 20 challenging adversarial queries covering synonyms, paraphrases, vocabulary mismatch, irrelevant tasks, ambiguous queries, near-duplicate content, non-obvious chunks, project isolation, vague queries, and terminology substitution.",
+  "project_id": "cliverse-eval",
+  "documents": [
+    {
+      "id": "doc-arch",
+      "source_path": "docs/architecture.md",
+      "source_type": "doc",
+      "title": "System Architecture",
+      "content": "# CLIVERSE System Architecture\n\nCLIVERSE is a local-first AI development environment that sits above existing AI CLIs and provides persistent memory, structured reasoning, and user-defined rules.\n\n## Core Components\n\nThe system consists of four core members:\n- Member 1 (Laya): Core execution engine and CLI orchestration\n- Member 2: Memory, RAG, and rules intelligence\n- Member 3: Dashboard and frontend visualization\n- Member 4: Security, governance, and audit trail\n\n## Design Principles\n\nThe architecture prioritizes local-first execution. All persistent storage uses SQLite for zero-dependency deployment. The system supports plugin-based extensibility through a rules engine and provider abstraction layer.\n\n## Data Flow\n\nUser tasks are processed by Laya. Laya calls Member 2 to retrieve relevant context before generating a response. Retrieved context is injected into the prompt as a ContextPacket. The rules engine applies any matching rules at the task level."
+    },
+    {
+      "id": "doc-database",
+      "source_path": "docs/database.md",
+      "source_type": "doc",
+      "title": "Database Design",
+      "content": "# Database Design\n\n## Primary Storage\n\nThe backend persists application data in SQLite. This was selected for zero-dependency local-first deployment. Each project gets its own isolated database file under .envcore/memory/.\n\n## Schema\n\nThe database contains three primary tables:\n- memory_records: Top-level indexed documents\n- memory_chunks: Atomic searchable chunks with embeddings\n- conversation_turns: Session conversation history\n\n## Embedding Storage\n\nVector embeddings are stored as JSON-serialized float arrays in a TEXT column. Cosine similarity is computed in Python rather than using a vector database extension.\n\n## Why Not PostgreSQL?\n\nPostgreSQL was considered but rejected because it requires a running server process, which conflicts with the local-first zero-dependency requirement.\n\n## Why Not MongoDB?\n\nMongoDB was also evaluated and rejected for the same server-dependency reason. The document model does not offer meaningful advantages over SQLite for this workload."
+    },
+    {
+      "id": "doc-auth",
+      "source_path": "docs/authentication.md",
+      "source_type": "doc",
+      "title": "Authentication Design",
+      "content": "# Authentication Design\n\n## Token-Based Authentication\n\nThe system uses JWT bearer tokens for authenticating API requests. Tokens are signed using RS256 (RSA Signature with SHA-256). Token expiry is set to 24 hours by default for access tokens.\n\n## Session Management\n\nUser sessions are tracked using session_id fields throughout the memory system. Each CLI session receives a unique session identifier that propagates through ingestion, storage, and retrieval.\n\n## Trust Model\n\nThe trust gate validates that callers have appropriate permissions before executing sensitive operations. The security layer enforces identity registration and permission scope enforcement.\n\n## Refresh Tokens\n\nRefresh tokens have a 30-day expiry. Sessions are invalidated on explicit logout. There is no server-side session state — all state is carried in the signed token."
+    },
+    {
+      "id": "doc-api",
+      "source_path": "docs/api-design.md",
+      "source_type": "doc",
+      "title": "API Design Conventions",
+      "content": "# API Design Conventions\n\n## Internal Interfaces\n\nMember 2 exposes retrieval through the RetrievalService class. The public interface is search_memory() and retrieve_context(). All public methods accept optional project_id for multi-tenant isolation. The ContextPacket return type is the canonical interface for Laya consumption.\n\n## No REST Until Stage 5\n\nREST endpoints are explicitly deferred until Stage 5. All current integration is through direct Python module imports. There are no HTTP endpoints in Stage 1, 2, or 3.\n\n## Error Handling\n\nAll retrieval methods must return empty lists or empty ContextPackets rather than raising exceptions for missing data or no results. The caller must handle empty responses gracefully.\n\n## Versioning\n\nThe internal API is not yet versioned. Breaking changes will be coordinated across all four members during major stage transitions."
+    },
+    {
+      "id": "doc-testing",
+      "source_path": "docs/testing-strategy.md",
+      "source_type": "doc",
+      "title": "Testing Strategy",
+      "content": "# Testing Strategy\n\n## Framework\n\nThe project uses pytest with unittest for all unit and integration tests. All tests must be deterministic and independent. Tests must not depend on external services, the internet, or shared state.\n\n## Test Organization\n\nTests are organized by stage:\n- test_memory_storage_models.py: Stage 1 (models and storage)\n- test_ingestion_embeddings.py: Stage 2 (ingestion pipeline)\n- test_retrieval_context.py: Stage 3 (retrieval and context assembly)\n- test_bug_fixes.py: Regression tests for identified bugs\n- test_rag_validation.py: Stage 3.5 RAG quality validation\n\n## Coverage Requirements\n\nEvery new feature must ship with tests. No fabricated metrics or hard-coded expected results are permitted. Integration tests must use temporary in-memory or temp-file databases.\n\n## Prohibited Practices\n\nTests that only exercise keyword matches without paraphrase coverage are insufficient for RAG validation. Mock return values that skip the real retrieval path are not permitted in RAG quality tests."
+    },
+    {
+      "id": "doc-config",
+      "source_path": "docs/configuration.md",
+      "source_type": "doc",
+      "title": "Configuration Management",
+      "content": "# Configuration Management\n\n## Database Path\n\nThe default SQLite database path is .envcore/memory/cliverse_memory.db. This can be overridden by passing db_path to SQLiteMemoryStorage during instantiation.\n\n## Embedding Configuration\n\nThe default embedding provider is LocalBaselineEmbeddingProvider with dimension=64. For production deployments, neural providers such as Ollama or SentenceTransformers can be substituted by implementing the EmbeddingProvider abstract base class.\n\n## Chunking Configuration\n\nDefault chunk_size is 500 characters. Default chunk_overlap is 50 characters. These settings can be tuned via TextChunker constructor arguments. Larger chunks preserve more context but reduce retrieval precision.\n\n## Score Weights\n\nThe hybrid retrieval uses 0.7 semantic weight and 0.3 lexical weight by default. The min_score threshold defaults to 0.35 for search_memory() and retrieve_context()."
+    },
+    {
+      "id": "doc-conventions",
+      "source_path": "docs/conventions.md",
+      "source_type": "doc",
+      "title": "Code Conventions",
+      "content": "# Code Conventions\n\n## Python Style\n\nThe codebase follows PEP 8 with the following additions:\n- All public functions must have type annotations\n- Docstrings use the Google style format\n- Maximum line length is 100 characters\n\n## Module Organization\n\nEach Member owns a clearly scoped Python package:\n- memory/ and rules/ belong to Member 2\n- core/ belongs to Member 1 (Laya execution)\n- dashboard/ belongs to Member 3\n- security/, audit/, governance/ belong to Member 4\n\n## Naming Conventions\n\nClasses use PascalCase. Functions and variables use snake_case. Constants use UPPER_SNAKE_CASE. Private methods are prefixed with a single underscore. Test functions are prefixed with test_."
+    },
+    {
+      "id": "dec-database",
+      "source_path": "decisions/database-selection.md",
+      "source_type": "decision",
+      "title": "Decision: Database Selection",
+      "content": "# Decision: Database Selection\n\nDate: 2026-01-15\nStatus: Accepted\n\n## Decision\n\nWe selected SQLite as the primary persistence layer for CLIVERSE memory.\n\n## Rationale\n\n1. Zero external dependencies — no server process required\n2. Single file storage — easy backup and portability\n3. Python standard library support via sqlite3 module\n4. Sufficient performance for local development workloads\n5. Simple schema migration path for future versions\n\n## Alternatives Rejected\n\n- PostgreSQL: Requires running server process, conflicts with local-first zero-dependency design\n- MongoDB: Same server-dependency issue; document model adds no value for this workload\n- Redis: In-memory only by default, requires additional persistence configuration, no durable storage guarantee"
+    },
+    {
+      "id": "dec-auth",
+      "source_path": "decisions/auth-mechanism.md",
+      "source_type": "decision",
+      "title": "Decision: Authentication Mechanism",
+      "content": "# Decision: Authentication Mechanism\n\nDate: 2026-01-20\nStatus: Accepted\n\n## Decision\n\nJWT bearer tokens using RS256 signing are the selected authentication mechanism for CLIVERSE.\n\n## Rationale\n\n1. Stateless — no server-side session storage required\n2. Portable — tokens can be validated without database lookups\n3. Standard — widely supported across tooling and libraries\n4. RS256 — asymmetric signing allows public key verification without exposing private key\n\n## Token Lifecycle\n\n- Access tokens expire after 24 hours\n- Refresh tokens expire after 30 days\n- Sessions are invalidated on explicit logout\n- No server-side session state is maintained"
+    },
+    {
+      "id": "dec-frontend",
+      "source_path": "decisions/frontend-framework.md",
+      "source_type": "decision",
+      "title": "Decision: Frontend Framework",
+      "content": "# Decision: Frontend Framework\n\nDate: 2026-01-25\nStatus: Accepted\n\n## Decision\n\nThe dashboard (Member 3) uses React with TypeScript as the frontend framework.\n\n## Rationale\n\n1. Component-based architecture suits the dashboard panel design\n2. Strong TypeScript support ensures type safety across the UI layer\n3. Large ecosystem provides data visualization components out of the box\n\n## Build Tooling\n\nVite is used as the build tool for fast development iteration. The dashboard is served as a sidecar process alongside the main CLI. Hot module replacement is supported for rapid frontend development."
+    },
+    {
+      "id": "dec-near-dup-db",
+      "source_path": "decisions/rejected-storage.md",
+      "source_type": "decision",
+      "title": "Decision: Rejected Storage Engines",
+      "content": "# Decision: Rejected Storage Engines\n\nDate: 2026-01-16\nStatus: Superseded\n\n## Summary of Discarded Storage Options\n\nDuring early architectural evaluations, various persistence mechanisms were reviewed and discarded.\n\n## Evaluated Engines\n\n1. PostgreSQL was rejected because a dedicated database daemon process is mandatory.\n2. MongoDB was eliminated due to external server requirements.\n3. Flat file JSON was rejected because atomic transactions and structured SQL querying were needed.\n\nThis decision log complements database-selection.md."
+    },
+    {
+      "id": "doc-legacy-auth",
+      "source_path": "docs/legacy-auth.md",
+      "source_type": "doc",
+      "title": "Legacy Authentication Notes",
+      "content": "# Deprecated Authentication Notes\n\nPrior to adopting asymmetric RS256 JWT tokens, basic bearer tokens and static API keys were considered.\nStatic tokens lack expiration and cannot carry cryptographic claims safely across offline agents.\nSession-based cookie stores were also rejected because CLI tools have no cookie jars."
+    }
+  ],
+  "queries": [
+    {
+      "id": "adv-01",
+      "query": "cryptographic asymmetric keys for verifying client credentials",
+      "category": "synonyms",
+      "expected_sources": ["docs/authentication.md", "decisions/auth-mechanism.md"],
+      "notes": "Synonym query — substitutes 'tokens', 'JWT', 'RS256' with 'cryptographic asymmetric keys'"
+    },
+    {
+      "id": "adv-02",
+      "query": "graphical user interface visualization stack",
+      "category": "synonyms",
+      "expected_sources": ["decisions/frontend-framework.md"],
+      "notes": "Synonym query — substitutes 'dashboard', 'React' with 'graphical user interface visualization stack'"
+    },
+    {
+      "id": "adv-03",
+      "query": "where are historical prompt interactions persisted across CLI runs",
+      "category": "paraphrases",
+      "expected_sources": ["docs/database.md"],
+      "notes": "Paraphrase query — maps to conversation_turns in database schema"
+    },
+    {
+      "id": "adv-04",
+      "query": "guidelines ensuring consistent naming style across python functions",
+      "category": "paraphrases",
+      "expected_sources": ["docs/conventions.md"],
+      "notes": "Paraphrase query — maps to Naming Conventions section in conventions doc"
+    },
+    {
+      "id": "adv-05",
+      "query": "relational data tier selection rationale",
+      "category": "vocabulary_mismatch",
+      "expected_sources": ["decisions/database-selection.md", "docs/database.md"],
+      "notes": "Vocabulary mismatch — uses 'relational data tier' instead of 'SQLite database'"
+    },
+    {
+      "id": "adv-06",
+      "query": "handling caller identity authorization gates",
+      "category": "vocabulary_mismatch",
+      "expected_sources": ["docs/authentication.md"],
+      "notes": "Vocabulary mismatch — uses 'caller identity authorization gates' instead of 'trust gate'"
+    },
+    {
+      "id": "adv-07",
+      "query": "kubernetes helm chart deployment setup for cluster ingress",
+      "category": "irrelevant",
+      "expected_sources": [],
+      "notes": "Irrelevant query — totally out of domain, system should return 0 results or low scores"
+    },
+    {
+      "id": "adv-08",
+      "query": "apache kafka event streaming topics and partitions",
+      "category": "irrelevant",
+      "expected_sources": [],
+      "notes": "Irrelevant query — streaming message brokers are not in this project"
+    },
+    {
+      "id": "adv-09",
+      "query": "config",
+      "category": "ambiguous",
+      "expected_sources": ["docs/configuration.md"],
+      "notes": "Ambiguous single-token query — tests retrieval on ultra-short query"
+    },
+    {
+      "id": "adv-10",
+      "query": "database",
+      "category": "ambiguous",
+      "expected_sources": ["docs/database.md", "decisions/database-selection.md"],
+      "notes": "Ambiguous single-token query — multiple matching docs with equal keyword prominence"
+    },
+    {
+      "id": "adv-11",
+      "query": "why postgresql was discarded as backend storage",
+      "category": "near_duplicate",
+      "expected_sources": ["decisions/database-selection.md", "decisions/rejected-storage.md", "docs/database.md"],
+      "notes": "Near-duplicate source query — three documents discuss postgresql rejection"
+    },
+    {
+      "id": "adv-12",
+      "query": "reasons static bearer api keys were deprecated",
+      "category": "near_duplicate",
+      "expected_sources": ["docs/legacy-auth.md"],
+      "notes": "Near-duplicate source query — tests discriminating legacy auth from active auth"
+    },
+    {
+      "id": "adv-13",
+      "query": "maximum character length before text boundary partitioning occurs",
+      "category": "non_obvious_chunks",
+      "expected_sources": ["docs/configuration.md"],
+      "notes": "Non-obvious chunk — refers to chunk_size=500 in configuration.md"
+    },
+    {
+      "id": "adv-14",
+      "query": "how cosine distance is calculated without third-party vector plugins",
+      "category": "non_obvious_chunks",
+      "expected_sources": ["docs/database.md"],
+      "notes": "Non-obvious chunk — located in Embedding Storage subsection of database.md"
+    },
+    {
+      "id": "adv-15",
+      "query": "What database does the application use for persistent storage?",
+      "category": "project_isolation",
+      "project_override": "unrelated-foreign-project",
+      "expected_sources": [],
+      "notes": "Project isolation query — query is relevant to cliverse-eval but executed under unrelated project ID"
+    },
+    {
+      "id": "adv-16",
+      "query": "What authentication mechanism is used?",
+      "category": "project_isolation",
+      "project_override": "isolated-tenant-beta",
+      "expected_sources": [],
+      "notes": "Project isolation query — cross-tenant query must return 0 results"
+    },
+    {
+      "id": "adv-17",
+      "query": "auth",
+      "category": "short_vague",
+      "expected_sources": ["docs/authentication.md", "decisions/auth-mechanism.md"],
+      "notes": "Short vague query — four characters, tests token boundary prefix matching"
+    },
+    {
+      "id": "adv-18",
+      "query": "tests",
+      "category": "short_vague",
+      "expected_sources": ["docs/testing-strategy.md"],
+      "notes": "Short vague query — tests plural morphological matching on single token"
+    },
+    {
+      "id": "adv-19",
+      "query": "hot module reload dev server for ui sidecar",
+      "category": "terminology_substitution",
+      "expected_sources": ["decisions/frontend-framework.md"],
+      "notes": "Terminology substitution — uses 'hot module reload dev server' for Vite build tooling"
+    },
+    {
+      "id": "adv-20",
+      "query": "offline deterministic unit testing harness without network dependencies",
+      "category": "terminology_substitution",
+      "expected_sources": ["docs/testing-strategy.md"],
+      "notes": "Terminology substitution — uses 'offline deterministic unit testing harness' for pytest framework"
+    }
+  ]
+}

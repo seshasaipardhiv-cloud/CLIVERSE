@@ -865,6 +865,23 @@ class TestEvaluationIntegration(unittest.TestCase):
         print(f"  Recall@5: {metrics['recall_5']:.1%}")
         print(f"  MRR: {metrics['mrr']:.3f}")
 
+    def test_adversarial_rag_evaluation_executes_and_attributes_failures(self):
+        """
+        P0-5: Adversarial evaluation must execute without error, report Recall/Precision/MRR,
+        and provide causal failure attribution across difficult query types.
+        """
+        import sys
+        sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
+        from evaluate_retrieval_adversarial import run_adversarial_evaluation
+        fixture_path = str(Path(__file__).parent / "fixtures" / "retrieval_eval_adversarial.json")
+        adv_metrics = run_adversarial_evaluation(fixture_path, top_k=5, min_score=0.1, verbose=False)
+        self.assertGreater(adv_metrics["recall_5"], 0.0)
+        self.assertGreater(adv_metrics["mrr"], 0.0)
+        self.assertEqual(adv_metrics["total_queries"], 20)
+        self.assertIn("attributions", adv_metrics)
+        self.assertIsInstance(adv_metrics["attributions"], dict)
+        self.assertGreater(len(adv_metrics["attributions"]), 0)
+
 
 import json
 
