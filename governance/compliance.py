@@ -93,7 +93,7 @@ class ComplianceChecker:
                 source = self.regulatory_monitor.get_source(source_id) if source_id else None
                 if source:
                     reg_warnings.append(
-                        f"Relevant regulation: {source.name} ({source.jurisdiction}) — "
+                        f"Relevant regulation: {source.name} ({source.jurisdiction}) - "
                         f"Ref: {policy.regulatory_ref}"
                     )
                     recommendations.append(

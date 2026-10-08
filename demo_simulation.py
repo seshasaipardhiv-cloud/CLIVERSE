@@ -100,7 +100,7 @@ def run_demo():
     gate.audit.print_timeline(limit=10)
 
     print("=" * 80)
-    print("      DEMONSTRATION COMPLETE — ALL GATES VERIFIED SUCCESSFULLY")
+    print("      DEMONSTRATION COMPLETE - ALL GATES VERIFIED SUCCESSFULLY")
     print("=" * 80)
 
 
