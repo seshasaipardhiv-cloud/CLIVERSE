@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cliverse"
+version = "0.1.0"
+description = "A local-first environment for AI coding CLIs"
+requires-python = ">=3.10,<3.14"
+dependencies = []
+
+[project.scripts]
+cliverse = "cliverse.cli:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]

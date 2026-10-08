@@ -6,11 +6,11 @@ their internals.
 
 ## Member 1 — Core + Laya
 
-- [ ] **M1-01 — Create the Python CLI foundation and `env init`**
+- [x] **M1-01 — Create the Python CLI foundation and `env init`**
   - Acceptance: package starts; `--help` works; JSON is the default; init
     creates project-local metadata without overwriting existing files.
   - Verify: standard-library tests plus initialization in a temporary folder.
-  - Files: `src/cliverse/`, `tests/`, `pyproject.toml`, `README.md`.
+  - Files: `src/cliverse/`, `tests/`, `pyproject.toml`, `env.py`.
   - Dependencies: project contract (`PRD.md`).
 
 - [ ] **M1-02 — Persist sessions and core events**

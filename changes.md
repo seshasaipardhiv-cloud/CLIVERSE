@@ -14,3 +14,14 @@
   inference explicitly pending.
 - No application code, package installation, model download or hosted API use
   was performed in this documentation slice.
+
+## 2026-10-08 — M1-01: create CLI foundation and environment initialization
+
+- Added a Python 3.10–3.13 package, source-checkout launcher, stable JSON
+  errors, and `init`/`status` commands.
+- Project initialization creates `.envcore/config.json` with restrictive
+  permissions and refuses to overwrite existing configuration.
+- Added focused standard-library tests for initialization, malformed
+  configuration, non-overwrite behavior, JSON output, help and version.
+- Verified: 5 targeted tests passed; CLI help and version commands succeeded.
+- No dependency installation, model download or hosted API use.
