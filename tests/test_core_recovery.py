@@ -32,6 +32,7 @@ class GitRecoveryTests(unittest.TestCase):
         self.temporary_directory = tempfile.TemporaryDirectory()
         self.root = Path(self.temporary_directory.name)
         self.git("init", "--quiet")
+        self.git("config", "core.autocrlf", "false")
         self.git("config", "user.name", "CLIVERSE Test")
         self.git("config", "user.email", "test@example.invalid")
         (self.root / "tracked.txt").write_text("original\n", encoding="utf-8")

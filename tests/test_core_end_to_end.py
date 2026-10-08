@@ -33,6 +33,10 @@ class CoreEndToEndTests(unittest.TestCase):
             (root / ".gitignore").write_text(".envcore/\n", encoding="utf-8")
             subprocess.run(["git", "init", "--quiet", str(root)], check=True)
             subprocess.run(
+                ["git", "-C", str(root), "config", "core.autocrlf", "false"],
+                check=True,
+            )
+            subprocess.run(
                 ["git", "-C", str(root), "config", "user.name", "CLIVERSE Test"],
                 check=True,
             )

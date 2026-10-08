@@ -19,6 +19,8 @@ class SessionStoreTests(unittest.TestCase):
         self.store = SessionStore(self.root / ".envcore" / "cliverse.sqlite3")
 
     def tearDown(self):
+        import gc
+        gc.collect()
         self.temporary_directory.cleanup()
 
     def test_session_and_events_persist_between_store_instances(self):
@@ -47,11 +49,15 @@ class SessionStoreTests(unittest.TestCase):
     def test_events_are_append_only(self):
         session = self.store.create_session(self.root, "Test event immutability")
         with self.assertRaises(sqlite3.IntegrityError):
-            with sqlite3.connect(self.store.database_path) as connection:
-                connection.execute(
-                    "UPDATE core_events SET summary = ? WHERE session_id = ?",
-                    ("tampered", session.session_id),
-                )
+            connection = sqlite3.connect(self.store.database_path)
+            try:
+                with connection:
+                    connection.execute(
+                        "UPDATE core_events SET summary = ? WHERE session_id = ?",
+                        ("tampered", session.session_id),
+                    )
+            finally:
+                connection.close()
 
     def test_finish_session_records_terminal_state(self):
         session = self.store.create_session(self.root, "Finish this session")
@@ -79,7 +85,10 @@ class SessionStoreTests(unittest.TestCase):
             metadata.mkdir(mode=0o700)
             external_database = parent / "external.sqlite3"
             external_database.write_text("not a database", encoding="utf-8")
-            (metadata / "cliverse.sqlite3").symlink_to(external_database)
+            try:
+                (metadata / "cliverse.sqlite3").symlink_to(external_database)
+            except OSError as exc:
+                self.skipTest(f"Symlinks not supported on this platform/privilege: {exc}")
 
             with self.assertRaises(InvalidSession):
                 SessionStore(metadata / "cliverse.sqlite3")
