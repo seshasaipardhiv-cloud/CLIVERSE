@@ -146,6 +146,7 @@ class ExecutionOrchestrator:
         timeout_seconds: Optional[float] = None,
         on_stdout: Optional[Callable[[str], None]] = None,
         on_stderr: Optional[Callable[[str], None]] = None,
+        skip_permissions: bool = False,
     ) -> OrchestrationResult:
         started_at = time.monotonic()
         clean_task = task.strip()
@@ -403,6 +404,7 @@ class ExecutionOrchestrator:
             timeout_seconds=timeout_seconds,
             on_stdout_line=on_stdout,
             on_stderr_line=on_stderr,
+            skip_permissions=skip_permissions,
         )
 
         total_duration = time.monotonic() - started_at

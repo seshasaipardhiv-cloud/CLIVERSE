@@ -327,6 +327,44 @@ class TestAgyExecution(unittest.TestCase):
         # Re-register real adapter
         provider_registry.register(AgyCLIAdapter())
 
+    # ── 11. Dangerously Skip Permissions Flag ─────────────────────────────────
+    def test_agy_dangerously_skip_permissions_flag(self):
+        """Verifies that skip_permissions passes --dangerously-skip-permissions when requested."""
+        adapter = AgyCLIAdapter(custom_executable="agy")
+        cmd_default = adapter.build_command(
+            task="task",
+            enriched_prompt="prompt",
+            project_root=str(self.root),
+            non_interactive=True,
+            skip_permissions=False,
+        )
+        self.assertNotIn("--dangerously-skip-permissions", cmd_default)
+        self.assertNotIn("run", cmd_default)
+        self.assertEqual(cmd_default[-2:], ["-p", "prompt"])
+
+        # When skip_permissions=True
+        cmd_skip = adapter.build_command(
+            task="task",
+            enriched_prompt="prompt",
+            project_root=str(self.root),
+            non_interactive=True,
+            skip_permissions=True,
+        )
+        self.assertIn("--dangerously-skip-permissions", cmd_skip)
+        self.assertNotIn("run", cmd_skip)
+        self.assertEqual(cmd_skip[-2:], ["-p", "prompt"])
+
+        # Via environment variable
+        with patch.dict(os.environ, {"CLIVERSE_AGY_SKIP_PERMISSIONS": "1"}):
+            cmd_env = adapter.build_command(
+                task="task",
+                enriched_prompt="prompt",
+                project_root=str(self.root),
+                non_interactive=True,
+            )
+            self.assertIn("--dangerously-skip-permissions", cmd_env)
+            self.assertNotIn("run", cmd_env)
+
 
 if __name__ == "__main__":
     unittest.main()

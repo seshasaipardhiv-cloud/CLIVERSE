@@ -358,6 +358,7 @@ class BaseCLIAdapter(ABC):
         extra_env: Optional[Mapping[str, str]] = None,
         on_stdout_line: Optional[Callable[[str], None]] = None,
         on_stderr_line: Optional[Callable[[str], None]] = None,
+        skip_permissions: bool = False,
     ) -> ProviderExecutionResult:
         """
         Executes the real CLI subprocess in project_root.
@@ -373,12 +374,21 @@ class BaseCLIAdapter(ABC):
         if not root.is_dir():
             raise NotADirectoryError(f"Target project root is not a directory: {project_root}")
 
-        cmd = self.build_command(
-            task=task,
-            enriched_prompt=enriched_prompt,
-            project_root=str(root),
-            non_interactive=True,
-        )
+        try:
+            cmd = self.build_command(
+                task=task,
+                enriched_prompt=enriched_prompt,
+                project_root=str(root),
+                non_interactive=True,
+                skip_permissions=skip_permissions,
+            )
+        except TypeError:
+            cmd = self.build_command(
+                task=task,
+                enriched_prompt=enriched_prompt,
+                project_root=str(root),
+                non_interactive=True,
+            )
 
         timeout = timeout_seconds or self.default_timeout_seconds
         child_env = self.prepare_environment(str(root), extra_env)
@@ -596,16 +606,17 @@ class AiderCLIAdapter(BaseCLIAdapter):
 class AgyCLIAdapter(BaseCLIAdapter):
     """
     Real Antigravity CLI Adapter (agy).
-    Executes: agy -p "<enriched_prompt>"
+    Executes: agy [-p | --dangerously-skip-permissions -p] "<enriched_prompt>"
     """
 
-    def __init__(self, custom_executable: Optional[str] = None) -> None:
+    def __init__(self, custom_executable: Optional[str] = None, skip_permissions: bool = False) -> None:
         super().__init__(
             provider_id="agy",
             display_name="Antigravity CLI (agy)",
             default_command="agy",
             custom_executable=custom_executable,
         )
+        self.skip_permissions = skip_permissions
 
     def build_command(
         self,
@@ -613,11 +624,23 @@ class AgyCLIAdapter(BaseCLIAdapter):
         enriched_prompt: str,
         project_root: str,
         non_interactive: bool = True,
+        skip_permissions: bool = False,
     ) -> list[str]:
         exe = self.executable() or self.default_command
+        cmd = [exe]
+        should_skip = (
+            skip_permissions
+            or self.skip_permissions
+            or os.environ.get("CLIVERSE_AGY_SKIP_PERMISSIONS") in ("1", "true", "TRUE")
+        )
+        if should_skip:
+            cmd.append("--dangerously-skip-permissions")
+
         if non_interactive:
-            return [exe, "-p", enriched_prompt]
-        return [exe, "-i", enriched_prompt]
+            cmd.extend(["-p", enriched_prompt])
+        else:
+            cmd.extend(["-i", enriched_prompt])
+        return cmd
 
 
 class GenericExecutableAdapter(BaseCLIAdapter):

@@ -117,6 +117,7 @@ def _build_parser() -> argparse.ArgumentParser:
     run_parser.add_argument("--cli", required=True, choices=("claude", "gemini", "codex", "aider", "agy"), help="AI CLI provider")
     _add_root_argument(run_parser)
     run_parser.add_argument("--confirm-warning", action="store_true", help="Confirm TrustGate warnings")
+    run_parser.add_argument("--dangerously-skip-permissions", action="store_true", help="Auto-approve tool permissions in headless CLI mode (e.g. agy)")
     run_parser.add_argument("--timeout", type=float, default=300.0, help="Execution timeout in seconds")
     run_parser.add_argument("--human", action="store_true", help="Display formatted readable stream")
     run_parser.add_argument("--json", action="store_true", help="Output JSON instead of readable stream")
@@ -126,6 +127,7 @@ def _build_parser() -> argparse.ArgumentParser:
         p_parser.add_argument("task", help="User task to execute")
         _add_root_argument(p_parser)
         p_parser.add_argument("--confirm-warning", action="store_true", help="Confirm TrustGate warnings")
+        p_parser.add_argument("--dangerously-skip-permissions", action="store_true", help="Auto-approve tool permissions in headless CLI mode (e.g. agy)")
         p_parser.add_argument("--timeout", type=float, default=300.0, help="Execution timeout in seconds")
         p_parser.add_argument("--human", action="store_true", help="Display formatted readable stream")
         p_parser.add_argument("--json", action="store_true", help="Output JSON instead of readable stream")
@@ -205,6 +207,7 @@ def main(argv: list[str] | None = None) -> int:
                     print(f"EXECUTION\n→ Starting {provider.capitalize()}...\n")
 
             orchestrator = ExecutionOrchestrator(project_root=root, event_sink=_event_sink)
+            skip_permissions = getattr(args, "dangerously_skip_permissions", False)
             result = orchestrator.run(
                 provider_name=provider,
                 task=task,
@@ -212,6 +215,7 @@ def main(argv: list[str] | None = None) -> int:
                 timeout_seconds=timeout,
                 on_stdout=_on_stdout,
                 on_stderr=_on_stderr,
+                skip_permissions=skip_permissions,
             )
 
             if use_json:
