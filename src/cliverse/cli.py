@@ -11,6 +11,7 @@ from typing import Any
 from . import __version__
 from .environment import ProjectEnvironment
 from .errors import CliverseError
+from .planning import PlanningRequest, RequestPlanner
 from .sessions import SessionStore
 
 
@@ -45,6 +46,28 @@ def _build_parser() -> argparse.ArgumentParser:
     status_parser = commands.add_parser("status", help="Inspect initialized environment metadata")
     _add_root_argument(status_parser)
 
+    plan_parser = commands.add_parser("plan", help="Build a structured task or request clarification")
+    plan_parser.add_argument("task", nargs="?", default="")
+    plan_parser.add_argument("--role", default="AI coding assistant")
+    plan_parser.add_argument("--context", default="")
+    plan_parser.add_argument("--requirement", action="append", default=[])
+    plan_parser.add_argument("--constraint", action="append", default=[])
+    plan_parser.add_argument(
+        "--output",
+        default="Implement the task and report verification.",
+    )
+    plan_parser.add_argument(
+        "--clarification",
+        action="append",
+        default=[],
+        help="Unresolved critical question from the user or a configured Laya caller",
+    )
+    plan_parser.add_argument(
+        "--without-memory",
+        action="store_true",
+        help="Explicitly plan without Member 2 RAG/rules (reported in provenance)",
+    )
+
     session_parser = commands.add_parser("session", help="Create and inspect persistent sessions")
     session_commands = session_parser.add_subparsers(dest="session_command", required=True)
 
@@ -77,6 +100,31 @@ def main(argv: list[str] | None = None) -> int:
     }
 
     try:
+        if args.command == "plan":
+            result = RequestPlanner(
+                allow_context_free=args.without_memory
+            ).plan(
+                PlanningRequest(
+                    task=args.task,
+                    role=args.role,
+                    context=args.context,
+                    requirements=tuple(args.requirement),
+                    constraints=tuple(args.constraint),
+                    output=args.output,
+                    clarification_questions=tuple(args.clarification),
+                )
+            )
+            payload = {
+                "ok": True,
+                "status": "ready" if result.ready else "needs_clarification",
+                "task": result.task.as_dict() if result.task else None,
+                "clarification_questions": list(result.clarification_questions),
+                "context_provenance": list(result.context_provenance),
+                "applicable_rule_ids": list(result.applicable_rule_ids),
+            }
+            _emit(payload, args.human)
+            return 0
+
         if args.command == "session":
             environment = ProjectEnvironment.load(args.root)
             store = SessionStore(environment.metadata_dir / "cliverse.sqlite3")

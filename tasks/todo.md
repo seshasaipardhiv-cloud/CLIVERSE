@@ -39,12 +39,16 @@ their internals.
   - Status: adapter accepts an explicitly injected router only; no checkpoint
     is installed, downloaded or run.
 
-- [ ] **M1-05 — Plan tasks and ask clarification when inputs are missing**
+- [x] **M1-05 — Plan tasks and gate unresolved clarification**
   - Acceptance: clear requests yield `role/context/task/requirements/
-    constraints/output`; unresolved critical gaps block execution.
+    constraints/output`; missing tasks or caller/Laya-supplied unresolved
+    critical questions block planning.
   - Verify: complete, ambiguous and malformed request tests.
   - Files: `src/cliverse/planning.py`, tests, docs.
   - Dependencies: M1-03, M1-04; Member 2 provider contract.
+  - Status: automatic model-based ambiguity detection and live Member 2
+    retrieval remain pending; use `--without-memory` only for explicit
+    context-free planning.
 
 - [ ] **M1-06 — Dispatch through a guarded CLI adapter**
   - Acceptance: adapter uses an argument vector, explicit cwd and timeout;

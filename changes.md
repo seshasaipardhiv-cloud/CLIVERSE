@@ -54,3 +54,17 @@
   envelope and never constructs a router or triggers checkpoint downloads.
 - Verified: 18 core tests passed, including fake-router response and error
   cases. No live model inference was run.
+
+## 2026-10-08 — M1-05: structure tasks and gate clarification
+
+- Added deterministic ROLE/CONTEXT/TASK/REQUIREMENTS/CONSTRAINTS/OUTPUT
+  planning with optional Member 2 context/rules providers.
+- Missing tasks and explicit unresolved critical questions return
+  `needs_clarification` without constructing a task.
+- Missing memory providers fail explicitly. `--without-memory` is an explicit
+  opt-in and reports that no RAG context/rules were retrieved.
+- Provider exceptions and invalid provenance remain visible.
+- Verified: 24 core tests passed; a CLI smoke test emitted the expected
+  structured JSON task.
+- Automatic semantic ambiguity detection and live Laya inference remain
+  unverified; caller-supplied clarification is the current boundary.
