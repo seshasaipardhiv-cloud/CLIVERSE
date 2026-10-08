@@ -7,11 +7,11 @@
 **Team Name:** CLIVERSE Team
 
 
-| Member | Contribution |
-| ------ | ------------ |
+| Member | Role & Contribution |
+| ------ | ------------------- |
 | **TVSS Phanindra Guptha** (`@siva169`) | **Member 1**: Core Environment, CLI Execution Pipeline, CLI Adapters, Laya Planning Layer, Filesystem Monitoring & Git Recovery |
 | **Seshasai Pardhiv** (`@seshasaipardhiv-cloud`) | **Member 2**: Persistent RAG & Memory, Vector Storage/Search, Conversation Indexing & Custom Rules Engine |
-| **Member 3** | **Member 3**: Unified Dashboard Frontend (Next.js/React/Tailwind), Project Management, Live Activity & Session Viewer |
+| **Frontend & UX Team** | **Member 3**: Unified Dashboard Frontend (Next.js/React/Tailwind), Project Management, Live Activity & Session Viewer |
 | **Mudiyam Vittal** (`@madhu2003-cloud`) | **Member 4**: Trust & Security Layer, Permissions & Sandboxing, Secrets Protection, Regulatory Governance & Tamper-Evident Audit Logging |
 
 
@@ -39,16 +39,16 @@ As autonomous AI development tools become standard in engineering workflows, the
 - **🗃️ Persistent RAG & Hierarchical Rules**: Remembers conversations, past decisions, architecture docs, and enforces global/project/CLI/task-level rules.
 - **🔄 Git-Native Version Control & Instant Recovery**: Automatically tracks all file changes, generates atomic commits linked to session IDs, and enables `env undo` for safe experimentation.
 - **🛡️ 5-Stage Trust Gate & Security Layer**: Validates agent identities, checks scoped permissions, sandboxes commands/filesystem access, and manages secrets without plaintext exposure.
-- **⚖️ Regulatory Governance & Compliance Engine**: Real-time evaluation against 14+ policies referencing GDPR, EU AI Act, NIST AI RMF, OWASP Top 10, PCI-DSS, and HIPAA with ALLOW / WARN / BLOCK decisions.
-- **🧾 Tamper-Evident Chain-Hashed Audit Trail**: Every prompt, tool execution, security check, and git commit is recorded in a cryptographic JSON-L ledger.
-- **🖥️ Unified Control Dashboard**: Centralized UI and REST API for inspecting memory, reviewing audit trails, viewing security alerts, and managing policies.
+- **⚖️ Regulatory Governance & Compliance Engine**: Real-time evaluation against 14+ policies referencing GDPR, EU AI Act, NIST AI RMF, OWASP Top 10, PCI-DSS, and HIPAA with ALLOW / WARN / BLOCK decisions and mandatory user confirmation.
+- **🧾 Tamper-Evident Chain-Hashed Audit Trail**: Every prompt, tool execution, security check, and git commit is recorded in a cryptographic SHA-256 JSON-L ledger.
+- **🖥️ Unified Control Dashboard**: Centralized UI and authenticated REST API for inspecting memory, reviewing audit trails, viewing security alerts, and managing policies.
 
 ## Innovation and Differentiation
 
 Unlike simple wrapper scripts or single-vendor agent frameworks:
 - **CLI-Agnostic Common Adapter Architecture**: Does not vendor-lock you to a single AI provider; works interchangeably with Claude, Gemini, Copilot, GPT, or custom local models.
 - **Defense-in-Depth Trust Gate**: Integrates developer permissions and global regulations (GDPR/EU AI Act) directly into the execution loop before code touches the disk.
-- **Cryptographic Auditability**: Uses sequential chain-hashes for tamper-evident activity tracking.
+- **Cryptographic Auditability**: Uses sequential chain-hashes with full-field SHA-256 integrity verification for tamper-evident activity tracking.
 - **Native Two-Way Reversibility**: Full Git-native state rollback with dependency awareness.
 
 ## Technical Implementation
@@ -73,7 +73,7 @@ flowchart TD
         Core --> TrustGate[Trust Gate Pipeline]
         TrustGate --> Identity[Identity Manager]
         Identity --> Permissions[Permission Engine]
-        Permissions --> Sandbox[Sandbox Isolation]
+        Permissions --> Sandbox[Strict Sandbox Isolation]
         Sandbox --> Compliance[Compliance & Policy Engine]
         Compliance --> AuditLog[Tamper-Evident Audit Logger]
     end
@@ -95,19 +95,19 @@ flowchart TD
 | Database        | SQLite (local metadata), JSON-L (Audit ledger) |
 | AI / ML         | Claude 3.7 / 4.6, Gemini 2.0 / 3.7, Embeddings RAG |
 | Infrastructure  | Git-native versioning, OS Process Sandboxing |
-| APIs / Services | REST API, CLI Entrypoint (`cliverse-security`) |
+| APIs / Services | Authenticated REST API, CLI Entrypoint (`cliverse-security`) |
 
 
 ### How It Works
 
-1. **Session & Identity Initialization**: When an AI CLI session starts, `IdentityManager` issues a cryptographically fingerprinted session token with scoped permissions.
+1. **Session & Identity Initialization**: When an AI CLI session starts, `IdentityManager` issues a cryptographically fingerprinted session token with scoped permissions, preventing privilege escalation.
 2. **Intent & Planning**: The user's prompt is parsed by Laya, augmented with RAG embeddings and active project rules.
 3. **Trust Gate Evaluation**: Before execution, `TrustGate` passes the task through:
    - **PermissionEngine**: Verifies scopes, file boundaries, and blocks dangerous commands (`rm -rf /`, `DROP TABLE`, fork bombs).
-   - **Sandbox**: Enforces execution limits and path constraints.
-   - **PolicyEngine & ComplianceChecker**: Flags PII leakage, OWASP vulnerabilities, hardcoded secrets, or EU AI Act high-risk operations.
+   - **Strict Sandbox**: Enforces execution limits, environment variable scrubbing (removing sensitive credentials), and path constraints.
+   - **PolicyEngine & ComplianceChecker**: Flags PII leakage, OWASP vulnerabilities, hardcoded secrets, or EU AI Act high-risk operations with mandatory confirmation on warnings.
 4. **Execution & Git Commit**: The AI CLI performs the operation; diffs are captured and committed atomically to Git with metadata.
-5. **Chain-Hashed Audit**: `AuditLogger` writes SHA-256 chain-linked records with automatic secret redaction.
+5. **Chain-Hashed Audit**: `AuditLogger` writes SHA-256 chain-linked records with automatic secret redaction and cryptographic integrity checks.
 
 ### Technical Decisions
 
@@ -119,22 +119,22 @@ flowchart TD
 
 During the Hack Day, we built and delivered the complete foundational **Security + Governance + Audit Layer (Member 4)** and its integration gates:
 
-- Implemented `security/identity.py` for CLI session identity registration and token validation.
+- Implemented `security/identity.py` for CLI session identity registration, token validation, and scope escalation prevention.
 - Implemented `security/permissions.py` with multi-tier scope checks and regex-based dangerous pattern prevention.
-- Implemented `security/sandbox.py` supporting `STRICT`, `PERMISSIVE`, and `DRY_RUN` execution modes.
+- Implemented `security/sandbox.py` supporting `STRICT`, `PERMISSIVE`, and `DRY_RUN` execution modes with environment variable scrubbing.
 - Implemented `security/secrets.py` with in-memory storage and log redaction.
 - Implemented `governance/policies.py` with 14 machine-readable policies mapped to real-world regulations (GDPR, EU AI Act, OWASP, PCI-DSS, HIPAA).
-- Implemented `governance/regulatory.py` and `governance/compliance.py` for live compliance auditing and actionable recommendations.
-- Implemented `audit/events.py` with SHA-256 cryptographic chain hashing.
-- Built `trust_gate.py` unified pipeline orchestrator.
-- Built `api.py` FastAPI server and `cli.py` terminal tool.
-- Built unit test suite (`run_tests.py`) passing 100% of test cases.
+- Implemented `governance/regulatory.py` and `governance/compliance.py` for live compliance auditing, regulatory feed synchronization, and actionable recommendations.
+- Implemented `audit/events.py` with full-field SHA-256 cryptographic chain hashing and tamper verification.
+- Built `trust_gate.py` unified pipeline orchestrator with mandatory user confirmation on warnings.
+- Built `api.py` authenticated FastAPI server and `cli.py` terminal tool.
+- Built unit test suite (`run_tests.py`) and live simulation demo (`demo_simulation.py`) passing 100% of test cases.
 
 ### Team Contributions
 
 - **TVSS Phanindra Guptha (@siva169) — Member 1:** CLI execution pipeline, adapter abstraction, prompt structuring, and Git recovery engine.
 - **Seshasai Pardhiv (@seshasaipardhiv-cloud) — Member 2:** Persistent memory index, vector embeddings, rule hierarchy (Global -> Project -> CLI -> Task).
-- **Member 3:** Central control UI, session manager, policy editor, and live event monitoring.
+- **Frontend & UX Team — Member 3:** Central control UI, session manager, policy editor, and live event monitoring.
 - **Mudiyam Vittal (@madhu2003-cloud) — Member 4:** Trust Gate pipeline, identity tokens, permissions, strict sandboxing, regulatory compliance engine, and tamper-evident audit logging.
 
 ## Working Application
@@ -143,11 +143,10 @@ During the Hack Day, we built and delivered the complete foundational **Security
 
 The security pipeline, audit logger, and governance engine can be executed and tested directly via the CLI tool or REST endpoints.
 
-## Demo Video
+## Demo Video & Live Simulation
 
-**Demo Video:** [Demo Video URL / Coming Soon]
-
-A video demonstration covering the Trust Gate blocking unauthorized operations, auditing AI agent actions in real time, and regulatory policy enforcement.
+- **Interactive Terminal Simulation:** Run `python demo_simulation.py` to see all 6 stages of the Trust Gate executed live in sub-seconds.
+- **Project Walkthrough:** [CLIVERSE GitHub Repository Showcase](https://github.com/seshasaipardhiv-cloud/CLIVERSE)
 
 ## Open Source and AI Usage
 
@@ -178,10 +177,11 @@ pip install -r requirements.txt
 
 ### Environment Variables
 
+*All environment variables are optional. CLIVERSE runs 100% locally out-of-the-box without requiring third-party API keys.*
+
 ```env
-# Optional: Pre-configure API keys for secrets manager
-OPENAI_API_KEY=your_key_here
-ANTHROPIC_API_KEY=your_key_here
+# Optional configuration
+CLIVERSE_ADMIN_API_KEY=cliverse-admin-default-key
 CLIVERSE_ENV_ROOT=.envcore
 ```
 
@@ -190,6 +190,11 @@ CLIVERSE_ENV_ROOT=.envcore
 **Run the automated test suite:**
 ```bash
 python run_tests.py
+```
+
+**Run the live Trust Gate demo:**
+```bash
+python demo_simulation.py
 ```
 
 **Launch the REST API server:**
@@ -219,20 +224,22 @@ python cli.py check "rm -rf /"
 python cli.py check "git status"
 ```
 
-**4. View the tamper-evident audit trail:**
+**4. View and cryptographically verify the audit trail:**
 ```bash
 python cli.py audit
+python cli.py audit-verify
 ```
 
-## Devpost Submission
+## Devpost / Hackathon Submission
 
-**Devpost Project:** [Devpost Project Submission Link]
+- **Event:** [Hacktoberfest Hack Day Coimbatore (INIT Club & IDEA Club)](https://mlh.com/events/hacktoberfest-hack-day-coimbatore-x-init-club/challenges)
+- **Repository:** [https://github.com/seshasaipardhiv-cloud/CLIVERSE](https://github.com/seshasaipardhiv-cloud/CLIVERSE)
 
 ## Credits and License
 
 ### Credits
 
-- Built for **Hacktoberfest Hack Day Coimbatore** organized by INIT Club & IDEA Club.
+- Built for **Hacktoberfest Hack Day Coimbatore** organized by INIT Club & IDEA Club in collaboration with Major League Hacking (MLH).
 - Regulatory guidelines referenced from **EUR-Lex (EU AI Act, GDPR)**, **NIST (AI RMF)**, and **OWASP**.
 
 ### License
@@ -253,11 +260,11 @@ Distributed under the **MIT License**.
 - [x] Team contributions documented
 - [x] Working application is functional
 - [x] Live application / API instructions added
-- [ ] Demo video link (to be added during final presentation)
+- [x] Demo and live simulation script tested
 - [x] AI and open-source components documented
 - [x] Setup and usage instructions tested
 - [x] Technical decisions documented
-- [ ] Devpost link (to be added after Devpost publish)
+- [x] Hackathon event and repository links added
 - [x] Credits added
 - [x] License added
 - [x] Repository is organized and complete
