@@ -83,24 +83,42 @@ ACTIVE_STATE = {
     "project_root": str(BASE_DIR),
 }
 
-# Member 4 TrustGate
-trust_gate = TrustGate(project_root=str(BASE_DIR), storage_dir=str(BASE_DIR / ".envcore"), sandbox_mode=SandboxMode.STRICT)
+def is_render_environment() -> bool:
+    """Detects whether running inside the Render cloud platform."""
+    return os.environ.get("RENDER", "").lower() in ("true", "1") or "RENDER" in os.environ
 
-# Member 2 Services
-memory_service = RetrievalService()
-rules_store = RuleStore(
-    project_rules_dir=str(BASE_DIR / ".cliverse" / "rules"),
-    global_rules_dir=str(BASE_DIR / ".envcore" / "rules" / "global"),
-)
-intelligence_service = LayaIntelligenceService(
-    retrieval_service=memory_service,
-    rules_engine=None,  # Uses default engine wrapping rules_store
-)
 
-# Member 1 Services
-sessions_store = SessionStore(str(BASE_DIR / ".envcore" / "sessions" / "sessions.db"))
-git_inspector = GitInspector(BASE_DIR)
-git_recovery = GitRecovery(BASE_DIR)
+def get_data_root() -> Path:
+    """
+    Resolves the persistent data root.
+    - If CLIVERSE_DATA_ROOT env var is provided, use it.
+    - If running on Render and /var/data exists, use /var/data.
+    - Otherwise default to project-local .envcore directory.
+    """
+    configured = os.environ.get("CLIVERSE_DATA_ROOT")
+    if configured:
+        return Path(configured).expanduser().resolve()
+    if is_render_environment() and Path("/var/data").exists():
+        return Path("/var/data").resolve()
+    return (BASE_DIR / ".envcore").resolve()
+
+
+def ensure_storage_directories(root: Path) -> dict[str, Path]:
+    """Ensures all necessary persistent subdirectories exist."""
+    dirs = {
+        "root": root,
+        "memory": root / "memory",
+        "sessions": root / "sessions",
+        "rules_global": root / "rules" / "global",
+        "identities": root / "identities",
+        "audit": root / "audit",
+        "secrets": root / "secrets",
+        "governance": root / "governance",
+    }
+    for d in dirs.values():
+        d.mkdir(parents=True, exist_ok=True)
+    return dirs
+
 
 # Member 4 to Member 1 Authorizer Bridge
 class TrustGateAuthorizer:
@@ -122,7 +140,79 @@ class TrustGateAuthorizer:
             requires_confirmation=res.requires_user_confirmation,
         )
 
+
+DATA_ROOT = get_data_root()
+STORAGE_DIRS = ensure_storage_directories(DATA_ROOT)
+ADMIN_SECRET = os.environ.get("CLIVERSE_ADMIN_SECRET") or os.environ.get("ADMIN_SECRET", "cliverse-admin-default-key")
+
+trust_gate = TrustGate(
+    project_root=str(BASE_DIR),
+    storage_dir=str(DATA_ROOT),
+    sandbox_mode=SandboxMode.STRICT,
+    admin_secret=ADMIN_SECRET,
+)
+
+memory_db_path = STORAGE_DIRS["memory"] / "cliverse_memory.db"
+memory_storage = SQLiteMemoryStorage(db_path=str(memory_db_path))
+memory_service = RetrievalService(storage=memory_storage)
+
+rules_store = RuleStore(
+    project_rules_dir=str(BASE_DIR / ".cliverse" / "rules"),
+    global_rules_dir=str(STORAGE_DIRS["rules_global"]),
+)
+intelligence_service = LayaIntelligenceService(
+    retrieval_service=memory_service,
+    rules_engine=None,
+)
+
+sessions_db_path = STORAGE_DIRS["sessions"] / "sessions.db"
+sessions_store = SessionStore(str(sessions_db_path))
+git_inspector = GitInspector(BASE_DIR)
+git_recovery = GitRecovery(BASE_DIR)
 trust_gate_authorizer = TrustGateAuthorizer(trust_gate)
+
+
+def configure_services(data_root: Optional[Path | str] = None, admin_secret: Optional[str] = None) -> Path:
+    """Reconfigures shared runtime services for a specific data root."""
+    global DATA_ROOT, STORAGE_DIRS, ADMIN_SECRET
+    global trust_gate, memory_service, rules_store, intelligence_service, sessions_store, trust_gate_authorizer
+    global memory_db_path, sessions_db_path
+
+    if data_root is not None:
+        DATA_ROOT = Path(data_root).expanduser().resolve()
+    else:
+        DATA_ROOT = get_data_root()
+
+    if admin_secret is not None:
+        ADMIN_SECRET = admin_secret
+    else:
+        ADMIN_SECRET = os.environ.get("CLIVERSE_ADMIN_SECRET") or os.environ.get("ADMIN_SECRET", "cliverse-admin-default-key")
+
+    STORAGE_DIRS = ensure_storage_directories(DATA_ROOT)
+    trust_gate = TrustGate(
+        project_root=str(BASE_DIR),
+        storage_dir=str(DATA_ROOT),
+        sandbox_mode=SandboxMode.STRICT,
+        admin_secret=ADMIN_SECRET,
+    )
+
+    memory_db_path = STORAGE_DIRS["memory"] / "cliverse_memory.db"
+    memory_storage = SQLiteMemoryStorage(db_path=str(memory_db_path))
+    memory_service = RetrievalService(storage=memory_storage)
+
+    rules_store = RuleStore(
+        project_rules_dir=str(BASE_DIR / ".cliverse" / "rules"),
+        global_rules_dir=str(STORAGE_DIRS["rules_global"]),
+    )
+    intelligence_service = LayaIntelligenceService(
+        retrieval_service=memory_service,
+        rules_engine=None,
+    )
+
+    sessions_db_path = STORAGE_DIRS["sessions"] / "sessions.db"
+    sessions_store = SessionStore(str(sessions_db_path))
+    trust_gate_authorizer = TrustGateAuthorizer(trust_gate)
+    return DATA_ROOT
 
 def get_memory_counts(project_id: str) -> tuple[int, int]:
     import sqlite3
@@ -272,7 +362,18 @@ system_router = APIRouter(prefix="/api", tags=["System & Overview"])
 
 @system_router.get("/health")
 def get_system_health():
-    """Comprehensive health check across all Member subsystems."""
+    """Comprehensive production health check across all Member subsystems."""
+    is_render = is_render_environment()
+    data_root = DATA_ROOT
+    is_writable = False
+    try:
+        test_file = data_root / ".write_test"
+        test_file.write_text("ok", encoding="utf-8")
+        test_file.unlink()
+        is_writable = True
+    except Exception:
+        is_writable = False
+
     git_clean = False
     git_branch = "unknown"
     try:
@@ -283,16 +384,25 @@ def get_system_health():
         pass
 
     _, mem_count = get_memory_counts(ACTIVE_STATE["project_id"])
-
     rule_count = len(rules_store.list_rules(project_id=ACTIVE_STATE["project_id"]))
     active_agents = len(trust_gate.identity.list_active())
     valid_chain, _ = trust_gate.audit.verify_chain_integrity()
+    providers = provider_registry.list_providers()
 
     return {
         "status": "HEALTHY",
         "timestamp": datetime.now(timezone.utc).isoformat(),
+        "version": "2.0.0",
+        "environment": "render" if is_render else "local",
+        "is_render": is_render,
         "active_project": ACTIVE_STATE["project_id"],
         "active_cli": ACTIVE_STATE["cli_name"],
+        "storage": {
+            "data_root": str(data_root),
+            "writable": is_writable,
+            "memory_db": str(memory_db_path),
+            "sessions_db": str(sessions_db_path),
+        },
         "subsystems": {
             "memory": {
                 "status": "OK_WITH_RESULTS" if mem_count > 0 else "OK_EMPTY",
@@ -316,6 +426,12 @@ def get_system_health():
             "git": {
                 "status": "CLEAN" if git_clean else "MODIFIED",
                 "branch": git_branch,
+            },
+            "cli_execution": {
+                "mode": "LOCAL_ONLY" if is_render else "LOCAL_WORKSTATION",
+                "available": not is_render,
+                "note": "LOCAL CLI EXECUTION AVAILABLE only on the user's local CLIVERSE machine." if is_render else "Host CLI binaries detected and executable.",
+                "providers_detected": len([p for p in providers if p.is_available]),
             },
         },
     }
@@ -1224,12 +1340,25 @@ class ProviderRunRequest(BaseModel):
 @providers_router.get("")
 def list_providers(refresh: bool = False):
     """Lists all AI CLI providers and their truthful detection status."""
-    return [p.to_dict() for p in provider_registry.list_providers(force_refresh=refresh)]
+    force = refresh or is_render_environment()
+    providers = provider_registry.list_providers(force_refresh=force)
+    if is_render_environment():
+        results = []
+        for p in providers:
+            d = p.to_dict()
+            d["is_available"] = False
+            d["status"] = "NOT_INSTALLED"
+            d["executable_path"] = None
+            d["version"] = None
+            d["error_message"] = "LOCAL CLI EXECUTION AVAILABLE only on the user's local CLIVERSE machine."
+            results.append(d)
+        return results
+    return [p.to_dict() for p in providers]
 
 @providers_router.post("/refresh")
 def refresh_providers():
     """Forces rediscovery of installed AI CLI binaries."""
-    return [p.to_dict() for p in provider_registry.list_providers(force_refresh=True)]
+    return list_providers(refresh=True)
 
 @providers_router.get("/{provider_id}")
 def get_provider_details(provider_id: str):
@@ -1237,7 +1366,14 @@ def get_provider_details(provider_id: str):
     p = provider_registry.get(provider_id)
     if not p:
         raise HTTPException(status_code=404, detail=f"Provider '{provider_id}' not found.")
-    return p.detect().to_dict()
+    d = p.detect(force_refresh=True).to_dict()
+    if is_render_environment():
+        d["is_available"] = False
+        d["status"] = "NOT_INSTALLED"
+        d["executable_path"] = None
+        d["version"] = None
+        d["error_message"] = "LOCAL CLI EXECUTION AVAILABLE only on the user's local CLIVERSE machine."
+    return d
 
 @providers_router.post("/execute")
 def execute_provider_task(req: ProviderRunRequest):
@@ -1250,6 +1386,33 @@ def execute_provider_task(req: ProviderRunRequest):
         raise HTTPException(status_code=404, detail=f"Unknown provider: {req.provider}")
 
     root = req.project_root or ACTIVE_STATE.get("project_root", str(BASE_DIR))
+
+    if is_render_environment():
+        msg = "LOCAL CLI EXECUTION AVAILABLE only on the user's local CLIVERSE machine."
+        log_system_event(
+            source="ORCHESTRATOR",
+            event_type="cli_execution_rejected",
+            summary=f"Cloud execution rejected for {p.display_name}: {msg}",
+            status="denied",
+            details={"provider": req.provider, "reason": "remote_host_not_supported"},
+        )
+        return {
+            "ok": False,
+            "session_id": "",
+            "provider_id": req.provider,
+            "project_root": root,
+            "task": req.task,
+            "status": "cloud_execution_unsupported",
+            "returncode": -1,
+            "stdout": "",
+            "stderr": msg,
+            "duration_seconds": 0.0,
+            "memory_count": 0,
+            "rule_decision": "UNKNOWN",
+            "trust_gate_decision": "BLOCK",
+            "trust_gate_reason": "Execution restricted to local workstation.",
+            "error_message": msg,
+        }
 
     log_system_event(
         source="ORCHESTRATOR",
@@ -1293,7 +1456,11 @@ def execute_provider_task(req: ProviderRunRequest):
 
 
 # ── App Factory ──────────────────────────────────────────────────────────────
-def create_app() -> FastAPI:
+def create_app(data_root: Optional[Path | str] = None) -> FastAPI:
+    if data_root is not None:
+        configure_services(data_root=data_root)
+    seed_initial_state_if_empty()
+
     app = FastAPI(
         title="CLIVERSE AI Control Center API",
         description="Unified cognitive, execution, and security command center for AI CLIs",
@@ -1323,7 +1490,9 @@ def create_app() -> FastAPI:
     # Mount static frontend build if present
     frontend_dist = BASE_DIR / "frontend" / "dist"
     if frontend_dist.is_dir():
-        app.mount("/assets", StaticFiles(directory=str(frontend_dist / "assets")), name="assets")
+        assets_dir = frontend_dist / "assets"
+        if assets_dir.is_dir():
+            app.mount("/assets", StaticFiles(directory=str(assets_dir)), name="assets")
 
         @app.get("/{full_path:path}", include_in_schema=False)
         async def serve_spa(full_path: str):
@@ -1339,10 +1508,14 @@ def create_app() -> FastAPI:
 
     return app
 
+
 if __name__ == "__main__":
     import uvicorn
-    app = create_app()
+    port = int(os.environ.get("PORT", 8000))
+    host = "0.0.0.0" if (is_render_environment() or os.environ.get("HOST") == "0.0.0.0") else os.environ.get("HOST", "127.0.0.1")
     print("=" * 70)
-    print("  CLIVERSE AI Control Center Backend starting on http://127.0.0.1:8000")
+    print(f"  CLIVERSE AI Control Center Backend starting on http://{host}:{port}")
+    print(f"  Environment: {'Render Cloud' if is_render_environment() else 'Local Workstation'}")
+    print(f"  Data Root:   {DATA_ROOT}")
     print("=" * 70)
-    uvicorn.run(app, host="127.0.0.1", port=8000, log_level="info")
+    uvicorn.run("api:create_app", factory=True, host=host, port=port, log_level="info")

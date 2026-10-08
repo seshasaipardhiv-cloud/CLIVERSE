@@ -18,4 +18,6 @@ ENV/
 *.egg-info/
 .aider*
 scratch_*.txt
+*.mp4
+
 

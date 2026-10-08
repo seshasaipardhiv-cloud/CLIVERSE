@@ -30,7 +30,7 @@ class SandboxPolicy:
     allowed_root: str = "."
     allowed_commands: list[str] = field(default_factory=lambda: [
         "git", "python", "node", "npm", "pip", "ls", "cat", "echo", "pytest", "uvicorn", "cargo", "go",
-        "claude", "gemini", "codex", "aider"
+        "claude", "gemini", "codex", "aider", "agy"
     ])
     blocked_commands: list[str] = field(default_factory=lambda: [
         "rm -rf /", "dd if=", "mkfs", "shutdown", "reboot", ":(){:|:&};:", "chmod 777 /"

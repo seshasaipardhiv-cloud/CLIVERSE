@@ -1,0 +1,27 @@
+# Render Blueprint Specification for CLIVERSE Control Center
+# https://render.com/docs/blueprint-spec
+
+services:
+  - type: web
+    name: cliverse
+    runtime: python
+    region: oregon
+    plan: starter
+    buildCommand: "pip install -e . && cd frontend && npm install && npm run build && cd .."
+    startCommand: "uvicorn api:create_app --factory --host 0.0.0.0 --port $PORT"
+    healthCheckPath: /api/health
+    envVars:
+      - key: RENDER
+        value: "true"
+      - key: CLIVERSE_DATA_ROOT
+        value: "/var/data"
+      - key: CLIVERSE_ADMIN_SECRET
+        generateValue: true
+      - key: PYTHON_VERSION
+        value: "3.11.9"
+      - key: NODE_VERSION
+        value: "20.18.0"
+    disk:
+      name: cliverse-persistent-storage
+      mountPath: /var/data
+      sizeGB: 1

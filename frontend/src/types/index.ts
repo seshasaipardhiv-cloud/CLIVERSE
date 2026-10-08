@@ -222,6 +222,7 @@ export interface SecuritySummary {
   chain_valid: boolean;
   chain_status: "VERIFIED" | "TAMPERED";
   chain_message: string;
+  allowed_root?: string;
 }
 
 export interface AuditEventItem {

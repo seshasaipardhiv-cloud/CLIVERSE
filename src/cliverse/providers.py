@@ -186,6 +186,23 @@ class BaseCLIAdapter(ABC):
         if self._cached_info and not force_refresh:
             return self._cached_info
 
+        # Cloud / Render environment check:
+        # Host workstation binaries are not available on the cloud container.
+        is_render = os.environ.get("RENDER", "").lower() in ("true", "1") or "RENDER" in os.environ
+        if is_render:
+            self._cached_info = ProviderInfo(
+                provider_id=self.provider_id,
+                display_name=self.display_name,
+                command_name=self.default_command,
+                status=ProviderStatus.NOT_INSTALLED,
+                executable_path=None,
+                version=None,
+                capabilities=self.get_capabilities(),
+                is_available=False,
+                error_message="LOCAL CLI EXECUTION AVAILABLE only on the user's local CLIVERSE machine.",
+            )
+            return self._cached_info
+
         executable_path: Optional[str] = None
         status = ProviderStatus.NOT_INSTALLED
         version: Optional[str] = None
@@ -576,6 +593,33 @@ class AiderCLIAdapter(BaseCLIAdapter):
         return [exe, "--message", enriched_prompt]
 
 
+class AgyCLIAdapter(BaseCLIAdapter):
+    """
+    Real Antigravity CLI Adapter (agy).
+    Executes: agy -p "<enriched_prompt>"
+    """
+
+    def __init__(self, custom_executable: Optional[str] = None) -> None:
+        super().__init__(
+            provider_id="agy",
+            display_name="Antigravity CLI (agy)",
+            default_command="agy",
+            custom_executable=custom_executable,
+        )
+
+    def build_command(
+        self,
+        task: str,
+        enriched_prompt: str,
+        project_root: str,
+        non_interactive: bool = True,
+    ) -> list[str]:
+        exe = self.executable() or self.default_command
+        if non_interactive:
+            return [exe, "-p", enriched_prompt]
+        return [exe, "-i", enriched_prompt]
+
+
 class GenericExecutableAdapter(BaseCLIAdapter):
     """
     Generic adapter for testing or custom user-configured tools.
@@ -631,6 +675,7 @@ class CLIProviderRegistry:
         self.register(GeminiCLIAdapter())
         self.register(CodexCLIAdapter())
         self.register(AiderCLIAdapter())
+        self.register(AgyCLIAdapter())
 
     def register(self, adapter: BaseCLIAdapter) -> None:
         self._providers[adapter.provider_id.lower()] = adapter
@@ -646,6 +691,8 @@ class CLIProviderRegistry:
             "codex-cli": "codex",
             "openai": "codex",
             "aider-chat": "aider",
+            "antigravity": "agy",
+            "google-agy": "agy",
         }
         resolved = alias_map.get(name, name)
         return self._providers.get(resolved)

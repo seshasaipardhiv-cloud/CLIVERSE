@@ -134,7 +134,7 @@ export const GitRecoveryPage: React.FC = () => {
             {gitStatus?.branch || "main"}
           </div>
           <p className="text-[11px] text-slate-500 mt-1 font-mono truncate">
-            {gitStatus?.project_root || "A:\\CLIVERSE"}
+            {gitStatus?.project_root || "."}
           </p>
         </Card>
 

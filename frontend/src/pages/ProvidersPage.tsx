@@ -176,6 +176,17 @@ export const ProvidersPage: React.FC = () => {
         </button>
       </div>
 
+      {/* ── Render Cloud Execution Notice ────────────────────────────────── */}
+      {providers.some((p) => p.error_message?.includes("LOCAL CLI EXECUTION AVAILABLE")) && (
+        <div className="p-3.5 bg-amber-950/40 border border-amber-500/40 rounded-lg flex items-center gap-3 text-xs font-mono text-amber-200">
+          <ShieldCheck className="w-4 h-4 text-amber-400 shrink-0" />
+          <div>
+            <span className="font-bold">CLOUD ENVIRONMENT NOTICE:</span> LOCAL CLI EXECUTION AVAILABLE only on the user's local CLIVERSE machine.
+            The deployed cloud dashboard does not have access to your local workstation's CLI binaries.
+          </div>
+        </div>
+      )}
+
       {/* ── Provider Detection Status Grid ─────────────────────────────── */}
       <div>
         <h2 className="text-xs font-mono text-slate-400 mb-3 uppercase tracking-wider">
@@ -280,7 +291,7 @@ export const ProvidersPage: React.FC = () => {
               </label>
               <div className="flex items-center gap-2 px-3 py-2 bg-[#0a0f1d] border border-[#1f2d45] rounded-lg text-sm font-mono text-slate-300">
                 <Folder className="w-4 h-4 text-emerald-400 shrink-0" />
-                <span className="truncate">{currentProject} (A:\CLIVERSE)</span>
+                <span className="truncate">{currentProject}</span>
               </div>
             </div>
 

@@ -172,14 +172,19 @@ class ExecutionOrchestrator:
         # ── 1. PROJECT DETECTION & ENVIRONMENT ──────────────────────────────
         self._emit_event("PROJECT", f"Detecting environment at {self.project_root}")
         project_id = self.project_root.name or "cliverse-core"
-        try:
-            env = ProjectEnvironment.load(str(self.project_root))
-            metadata_dir = env.metadata_dir
-            project_id = env.config.get("environment_id", project_id)
-        except Exception:
-            # Fallback to local .envcore or .cliverse
-            metadata_dir = self.project_root / ".envcore"
+        data_root_env = os.environ.get("CLIVERSE_DATA_ROOT")
+        if data_root_env:
+            metadata_dir = Path(data_root_env).resolve()
             metadata_dir.mkdir(parents=True, exist_ok=True)
+        else:
+            try:
+                env = ProjectEnvironment.load(str(self.project_root))
+                metadata_dir = env.metadata_dir
+                project_id = env.config.get("environment_id", project_id)
+            except Exception:
+                # Fallback to local .envcore or .cliverse
+                metadata_dir = self.project_root / ".envcore"
+                metadata_dir.mkdir(parents=True, exist_ok=True)
 
         session_db = metadata_dir / "sessions" / "sessions.db"
         session_db.parent.mkdir(parents=True, exist_ok=True)
@@ -192,7 +197,7 @@ class ExecutionOrchestrator:
         self._emit_event("PROVIDER", f"Resolving AI CLI provider '{provider_name}'")
         adapter = provider_registry.get(provider_name)
         if adapter is None:
-            err = f"Unknown provider '{provider_name}'. Supported: claude, gemini, codex, aider"
+            err = f"Unknown provider '{provider_name}'. Supported: claude, gemini, codex, aider, agy"
             self._emit_event("PROVIDER", err, level="ERROR")
             session_store.finish_session(session_id, "failed")
             return OrchestrationResult(

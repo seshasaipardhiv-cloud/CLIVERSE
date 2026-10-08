@@ -220,7 +220,9 @@ export const SecurityTrustPage: React.FC = () => {
           <div className="text-xl font-bold font-mono text-rose-400">
             {summary?.mode || "STRICT"}
           </div>
-          <p className="text-[11px] text-slate-500 mt-1 font-mono">Allowed root: A:\CLIVERSE</p>
+          <p className="text-[11px] text-slate-500 mt-1 font-mono">
+            Allowed root: {summary?.allowed_root || "project-root"}
+          </p>
         </Card>
 
         <Card>

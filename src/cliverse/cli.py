@@ -114,14 +114,14 @@ def _build_parser() -> argparse.ArgumentParser:
 
     run_parser = commands.add_parser("run", help="Execute task with real AI CLI provider")
     run_parser.add_argument("task", help="User task to execute")
-    run_parser.add_argument("--cli", required=True, choices=("claude", "gemini", "codex", "aider"), help="AI CLI provider")
+    run_parser.add_argument("--cli", required=True, choices=("claude", "gemini", "codex", "aider", "agy"), help="AI CLI provider")
     _add_root_argument(run_parser)
     run_parser.add_argument("--confirm-warning", action="store_true", help="Confirm TrustGate warnings")
     run_parser.add_argument("--timeout", type=float, default=300.0, help="Execution timeout in seconds")
     run_parser.add_argument("--human", action="store_true", help="Display formatted readable stream")
     run_parser.add_argument("--json", action="store_true", help="Output JSON instead of readable stream")
 
-    for provider_name in ("claude", "gemini", "codex", "aider"):
+    for provider_name in ("claude", "gemini", "codex", "aider", "agy"):
         p_parser = commands.add_parser(provider_name, help=f"Run task using real {provider_name.capitalize()} CLI")
         p_parser.add_argument("task", help="User task to execute")
         _add_root_argument(p_parser)
@@ -163,7 +163,7 @@ def main(argv: list[str] | None = None) -> int:
                 _emit({"ok": True, "providers": [p.to_dict() for p in providers]}, False)
             return 0
 
-        if args.command in ("run", "claude", "gemini", "codex", "aider"):
+        if args.command in ("run", "claude", "gemini", "codex", "aider", "agy"):
             from pathlib import Path
             from .orchestrator import ExecutionOrchestrator
             provider = getattr(args, "cli", None) or args.command

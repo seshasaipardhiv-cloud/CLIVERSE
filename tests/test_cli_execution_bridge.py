@@ -107,6 +107,13 @@ class TestCLIExecutionBridge(unittest.TestCase):
         self.assertEqual(cmd_aider[-3:], ["--message", "PROMPT", "--no-git"])
         self.assertTrue(cmd_aider[0].lower().endswith("aider") or cmd_aider[0].lower().endswith("aider.exe"))
 
+        from cliverse.providers import AgyCLIAdapter
+        agy = AgyCLIAdapter(custom_executable="agy")
+        cmd_agy = agy.build_command("task", "PROMPT", str(self.root), non_interactive=True)
+        self.assertEqual(cmd_agy[-2:], ["-p", "PROMPT"])
+        self.assertNotIn("run", cmd_agy)
+        self.assertTrue(cmd_agy[0].lower().endswith("agy") or cmd_agy[0].lower().endswith("agy.exe"))
+
     # ── 3. Prompt Enrichment ──────────────────────────────────────────────────
     def test_prompt_enrichment_packet_structure(self):
         """Verifies clear delineation of raw task, memory, rules, and planning."""
