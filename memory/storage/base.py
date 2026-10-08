@@ -58,8 +58,11 @@ class MemoryStorage(ABC):
         top_k: int = 5,
         project_id: Optional[str] = None,
         min_score: float = 0.0,
+        source_types: Optional[List[str]] = None,
+        session_id: Optional[str] = None,
+        source_path: Optional[str] = None,
     ) -> List[MemorySearchResult]:
-        """Performs ranked similarity and/or keyword search over chunks."""
+        """Performs ranked similarity and/or keyword search over chunks with optional filtering."""
         pass
 
     @abstractmethod

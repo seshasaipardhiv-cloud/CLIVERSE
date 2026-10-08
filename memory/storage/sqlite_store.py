@@ -285,11 +285,14 @@ class SQLiteMemoryStorage(MemoryStorage):
         top_k: int = 5,
         project_id: Optional[str] = None,
         min_score: float = 0.0,
+        source_types: Optional[List[str]] = None,
+        session_id: Optional[str] = None,
+        source_path: Optional[str] = None,
     ) -> List[MemorySearchResult]:
-        """Performs hybrid vector & keyword similarity search across chunks."""
+        """Performs hybrid vector & keyword similarity search across chunks with optional filtering."""
         sql = """
             SELECT c.chunk_id, c.record_id, c.content, c.embedding, c.start_line, c.end_line,
-                   c.metadata as chunk_meta, r.source_path, r.source_type, r.project_id
+                   c.metadata as chunk_meta, r.source_path, r.source_type, r.project_id, r.session_id
             FROM memory_chunks c
             JOIN memory_records r ON c.record_id = r.record_id
             WHERE 1=1
@@ -298,6 +301,16 @@ class SQLiteMemoryStorage(MemoryStorage):
         if project_id:
             sql += " AND r.project_id = ?"
             params.append(project_id)
+        if source_types:
+            placeholders = ",".join("?" for _ in source_types)
+            sql += f" AND r.source_type IN ({placeholders})"
+            params.extend(source_types)
+        if session_id:
+            sql += " AND r.session_id = ?"
+            params.append(session_id)
+        if source_path:
+            sql += " AND r.source_path = ?"
+            params.append(source_path)
 
         candidates: List[tuple[float, MemorySearchResult]] = []
         with self._get_connection() as conn:
@@ -328,6 +341,8 @@ class SQLiteMemoryStorage(MemoryStorage):
                         score=round(final_score, 4),
                         start_line=row["start_line"],
                         end_line=row["end_line"],
+                        project_id=row["project_id"],
+                        session_id=row["session_id"],
                         metadata=chunk_meta,
                     )
                     candidates.append((final_score, res))

@@ -61,6 +61,8 @@ class MemorySearchResult(BaseModel):
     score: float = Field(ge=0.0, le=1.0)
     start_line: Optional[int] = None
     end_line: Optional[int] = None
+    project_id: Optional[str] = None
+    session_id: Optional[str] = None
     metadata: Dict[str, Any] = Field(default_factory=dict)
 
 
@@ -78,10 +80,13 @@ class ContextItem(BaseModel):
 class ContextPacket(BaseModel):
     """
     Consolidated context packet assembled for Member 1 (Laya).
-    Contains raw items, token estimates, and a ready-to-inject markdown prompt.
+    Contains raw items, token estimates, a ready-to-inject markdown prompt,
+    and retrieval metadata for auditability (embedding model, score strategy,
+    filter params used during retrieval).
     """
     task: str
     items: List[ContextItem] = Field(default_factory=list)
     assembled_prompt_text: str = ""
     token_estimate: int = 0
     provenance_summary: List[str] = Field(default_factory=list)
+    retrieval_metadata: Dict[str, Any] = Field(default_factory=dict)

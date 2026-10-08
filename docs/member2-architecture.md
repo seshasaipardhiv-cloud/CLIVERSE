@@ -1,7 +1,7 @@
 # Member 2 Architecture Specification: RAG & Rules Intelligence
 
 **Subsystem:** CLIVERSE — Member 2 (Memory / RAG + Rules Intelligence)  
-**Status:** Stage 1 & Stage 2 Complete (Models, Storage, Ingestion Pipeline, Chunking, Deduplication, Embeddings)  
+**Status:** Stage 1, Stage 2 & Stage 3 Complete (Models, Storage, Ingestion, Embeddings, Hybrid Retrieval, Context Assembly)  
 **Authors:** Member 2 Engineering Lead  
 
 ---

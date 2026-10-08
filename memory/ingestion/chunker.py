@@ -108,6 +108,8 @@ class TextChunker:
                 "source_type": source_type,
                 "char_length": len(chunk_content),
                 "line_count": (e_line - s_line + 1),
+                # content_hash is stored here so ranking.py's hash-dedup path fires
+                "content_hash": content_hash,
             })
 
             result.append(MemoryChunk(
